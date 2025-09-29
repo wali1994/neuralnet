@@ -1,1 +1,0 @@
-// Placeholder App.js - full logic provided in earlier steps
