@@ -1,1 +1,107 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MNIST Denoiser (Autoencoder, Client-Side)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- TFJS + Vis -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@1.5.1/dist/tfjs-vis.umd.min.js"></script>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px;line-height:1.35}
+    h1{margin:0 0 8px}
+    small{color:#666}
+    .grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
+    .card{border:1px solid #ddd;border-radius:10px;padding:12px}
+    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .row > *{margin:2px 0}
+    .tag{background:#f4f4f4;border:1px solid #e3e3e3;border-radius:6px;padding:2px 6px}
+    canvas.preview{image-rendering:pixelated;border:1px solid #ddd;background:#fff}
+    .strip{display:flex;gap:6px}
+    .strip-col{display:flex;flex-direction:column;gap:6px;align-items:center}
+    .muted{color:#888}
+    .right{display:flex;justify-content:flex-end}
+    .w100{width:100%}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+  </style>
+</head>
+<body>
+  <h1>Homework: Train Denoiser with Autoencoder</h1>
+  <div class="grid">
+    <!-- Left column: controls -->
+    <div class="card">
+      <h3>Controls</h3>
+      <div class="row">
+        <label class="tag">Upload Train CSV
+          <input id="trainCsv" type="file" accept=".csv" />
+        </label>
+        <label class="tag">Upload Test CSV
+          <input id="testCsv" type="file" accept=".csv" />
+        </label>
+        <button id="btnLoad">Load Data</button>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <label class="tag">Noise σ
+          <input id="noiseStd" type="number" step="0.05" value="0.5" style="width:64px;margin-left:6px" />
+        </label>
+        <label class="tag">Epochs
+          <input id="epochs" type="number" value="8" style="width:64px;margin-left:6px" />
+        </label>
+        <label class="tag">Batch
+          <input id="batch" type="number" value="128" style="width:72px;margin-left:6px" />
+        </label>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <button id="btnTrain">Train Autoencoder</button>
+        <button id="btnTest5">Test 5 Random</button>
+        <button id="btnEval">Evaluate (MSE)</button>
+      </div>
+
+      <hr>
+      <div class="row">
+        <button id="btnSave">Save Model (Download)</button>
+        <label class="tag">Load model.json
+          <input id="modelJson" type="file" accept=".json" />
+        </label>
+        <label class="tag">Load weights.bin
+          <input id="modelWeights" type="file" />
+        </label>
+        <button id="btnLoadModel">Load Model (From Files)</button>
+      </div>
+
+      <hr>
+      <div class="row">
+        <button id="btnReset">Reset</button>
+        <button id="btnVisor">Toggle Visor</button>
+      </div>
+
+      <h4 style="margin-top:16px">Data Status</h4>
+      <div id="dataStatus" class="mono muted">[not loaded]</div>
+
+      <h4 style="margin-top:12px">Model Info</h4>
+      <div id="modelInfo" class="mono muted">[not built]</div>
+    </div>
+
+    <!-- Right column: logs + preview -->
+    <div class="card">
+      <div class="row right">
+        <small class="muted">All client-side • no network fetch • CSV only</small>
+      </div>
+      <h3>Training Logs</h3>
+      <div id="logs" class="mono"></div>
+      <div id="charts"></div>
+
+      <h3 style="margin-top:12px">Random 5 Preview</h3>
+      <small class="muted">Rows: Noisy (top) • Reconstructed (middle) • Clean (bottom)</small>
+      <div id="preview" class="strip" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <script src="./data-loader.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
 
