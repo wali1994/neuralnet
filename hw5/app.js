@@ -1,406 +1,216 @@
-class MNISTApp {
-    constructor() {
-        this.dataLoader = new MNISTDataLoader();
-        this.model = null;
-        this.isTraining = false;
-        this.trainData = null;
-        this.testData = null;
-        
-        this.initializeUI();
-    }
+// app.js
+import { readCsvFile, addGaussianNoise, draw28x28ToCanvas, sampleBatch } from './data-loader.js';
 
-    initializeUI() {
-        // Bind button events
-        document.getElementById('loadDataBtn').addEventListener('click', () => this.onLoadData());
-        document.getElementById('trainBtn').addEventListener('click', () => this.onTrain());
-        document.getElementById('evaluateBtn').addEventListener('click', () => this.onEvaluate());
-        document.getElementById('testFiveBtn').addEventListener('click', () => this.onTestFive());
-        document.getElementById('saveModelBtn').addEventListener('click', () => this.onSaveDownload());
-        document.getElementById('loadModelBtn').addEventListener('click', () => this.onLoadFromFiles());
-        document.getElementById('resetBtn').addEventListener('click', () => this.onReset());
-        document.getElementById('toggleVisorBtn').addEventListener('click', () => this.toggleVisor());
-    }
+let train = { xs: null, ys: null };
+let test  = { xs: null, ys: null };
+let model = null;
 
-    async onLoadData() {
-        try {
-            const trainFile = document.getElementById('trainFile').files[0];
-            const testFile = document.getElementById('testFile').files[0];
-            
-            if (!trainFile || !testFile) {
-                this.showError('Please select both train and test CSV files');
-                return;
-            }
+const els = {
+  trainCsv: document.getElementById('trainCsv'),
+  testCsv: document.getElementById('testCsv'),
+  btnLoad: document.getElementById('btnLoad'),
+  btnTrain: document.getElementById('btnTrain'),
+  btnTest5: document.getElementById('btnTest5'),
+  btnEval: document.getElementById('btnEval'),
+  noiseStd: document.getElementById('noiseStd'),
+  epochs: document.getElementById('epochs'),
+  batch: document.getElementById('batch'),
+  btnSave: document.getElementById('btnSave'),
+  modelJson: document.getElementById('modelJson'),
+  modelWeights: document.getElementById('modelWeights'),
+  btnLoadModel: document.getElementById('btnLoadModel'),
+  btnReset: document.getElementById('btnReset'),
+  btnVisor: document.getElementById('btnVisor'),
+  dataStatus: document.getElementById('dataStatus'),
+  modelInfo: document.getElementById('modelInfo'),
+  charts: document.getElementById('charts'),
+  logs: document.getElementById('logs'),
+  preview: document.getElementById('preview'),
+};
 
-            this.showStatus('Loading training data...');
-            const trainData = await this.dataLoader.loadTrainFromFiles(trainFile);
-            
-            this.showStatus('Loading test data...');
-            const testData = await this.dataLoader.loadTestFromFiles(testFile);
-
-            this.trainData = trainData;
-            this.testData = testData;
-
-            this.updateDataStatus(trainData.count, testData.count);
-            this.showStatus('Data loaded successfully!');
-            
-        } catch (error) {
-            this.showError(`Failed to load data: ${error.message}`);
-        }
-    }
-
-    async onTrain() {
-        if (!this.trainData) {
-            this.showError('Please load training data first');
-            return;
-        }
-
-        if (this.isTraining) {
-            this.showError('Training already in progress');
-            return;
-        }
-
-        try {
-            this.isTraining = true;
-            this.showStatus('Starting training...');
-            
-            // Split training data
-            const { trainXs, trainYs, valXs, valYs } = this.dataLoader.splitTrainVal(
-                this.trainData.xs, this.trainData.ys, 0.1
-            );
-
-            // Create or get model
-            if (!this.model) {
-                this.model = this.createModel();
-                this.updateModelInfo();
-            }
-
-            // Train with tfjs-vis callbacks
-            const startTime = Date.now();
-            const history = await this.model.fit(trainXs, trainYs, {
-                epochs: 5,
-                batchSize: 128,
-                validationData: [valXs, valYs],
-                shuffle: true,
-                callbacks: tfvis.show.fitCallbacks(
-                    { name: 'Training Performance' },
-                    ['loss', 'val_loss', 'acc', 'val_acc'],
-                    { callbacks: ['onEpochEnd'] }
-                )
-            });
-
-            const duration = (Date.now() - startTime) / 1000;
-            const bestValAcc = Math.max(...history.history.val_acc);
-            
-            this.showStatus(`Training completed in ${duration.toFixed(1)}s. Best val_acc: ${bestValAcc.toFixed(4)}`);
-            
-            // Clean up
-            trainXs.dispose();
-            trainYs.dispose();
-            valXs.dispose();
-            valYs.dispose();
-            
-        } catch (error) {
-            this.showError(`Training failed: ${error.message}`);
-        } finally {
-            this.isTraining = false;
-        }
-    }
-
-    async onEvaluate() {
-        if (!this.model) {
-            this.showError('No model available. Please train or load a model first.');
-            return;
-        }
-
-        if (!this.testData) {
-            this.showError('No test data available');
-            return;
-        }
-
-        try {
-            this.showStatus('Evaluating model...');
-            
-            const testXs = this.testData.xs;
-            const testYs = this.testData.ys;
-            
-            // Get predictions
-            const predictions = this.model.predict(testXs);
-            const predictedLabels = predictions.argMax(-1);
-            const trueLabels = testYs.argMax(-1);
-            
-            // Calculate accuracy
-            const accuracy = await this.calculateAccuracy(predictedLabels, trueLabels);
-            
-            // Create confusion matrix data
-            const confusionMatrix = await this.createConfusionMatrix(predictedLabels, trueLabels);
-            
-            // Show metrics in visor
-            const metricsContainer = { name: 'Test Metrics', tab: 'Evaluation' };
-            
-            // Overall accuracy
-            tfvis.show.modelSummary(metricsContainer, this.model);
-            tfvis.show.perClassAccuracy(metricsContainer, 
-                { values: this.calculatePerClassAccuracy(confusionMatrix) }, 
-                ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-            );
-            
-            // Confusion matrix
-            tfvis.render.confusionMatrix(metricsContainer, {
-                values: confusionMatrix,
-                tickLabels: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-            });
-            
-            this.showStatus(`Test accuracy: ${(accuracy * 100).toFixed(2)}%`);
-            
-            // Clean up
-            predictions.dispose();
-            predictedLabels.dispose();
-            trueLabels.dispose();
-            
-        } catch (error) {
-            this.showError(`Evaluation failed: ${error.message}`);
-        }
-    }
-
-    async onTestFive() {
-        if (!this.model || !this.testData) {
-            this.showError('Please load both model and test data first');
-            return;
-        }
-
-        try {
-            const { batchXs, batchYs, indices } = this.dataLoader.getRandomTestBatch(
-                this.testData.xs, this.testData.ys, 5
-            );
-            
-            const predictions = this.model.predict(batchXs);
-            const predictedLabels = predictions.argMax(-1);
-            const trueLabels = batchYs.argMax(-1);
-            
-            const predArray = await predictedLabels.array();
-            const trueArray = await trueLabels.array();
-            
-            this.renderPreview(batchXs, predArray, trueArray, indices);
-            
-            // Clean up
-            predictions.dispose();
-            predictedLabels.dispose();
-            trueLabels.dispose();
-            batchXs.dispose();
-            batchYs.dispose();
-            
-        } catch (error) {
-            this.showError(`Test preview failed: ${error.message}`);
-        }
-    }
-
-    async onSaveDownload() {
-        if (!this.model) {
-            this.showError('No model to save');
-            return;
-        }
-
-        try {
-            await this.model.save('downloads://mnist-cnn');
-            this.showStatus('Model saved successfully!');
-        } catch (error) {
-            this.showError(`Failed to save model: ${error.message}`);
-        }
-    }
-
-    async onLoadFromFiles() {
-        const jsonFile = document.getElementById('modelJsonFile').files[0];
-        const weightsFile = document.getElementById('modelWeightsFile').files[0];
-        
-        if (!jsonFile || !weightsFile) {
-            this.showError('Please select both model.json and weights.bin files');
-            return;
-        }
-
-        try {
-            this.showStatus('Loading model...');
-            
-            // Dispose old model if exists
-            if (this.model) {
-                this.model.dispose();
-            }
-            
-            this.model = await tf.loadLayersModel(
-                tf.io.browserFiles([jsonFile, weightsFile])
-            );
-            
-            this.updateModelInfo();
-            this.showStatus('Model loaded successfully!');
-            
-        } catch (error) {
-            this.showError(`Failed to load model: ${error.message}`);
-        }
-    }
-
-    onReset() {
-        if (this.model) {
-            this.model.dispose();
-            this.model = null;
-        }
-        
-        this.dataLoader.dispose();
-        this.trainData = null;
-        this.testData = null;
-        
-        this.updateDataStatus(0, 0);
-        this.updateModelInfo();
-        this.clearPreview();
-        this.showStatus('Reset completed');
-    }
-
-    toggleVisor() {
-        tfvis.visor().toggle();
-    }
-
-    createModel() {
-        const model = tf.sequential();
-        
-        model.add(tf.layers.conv2d({
-            filters: 32,
-            kernelSize: 3,
-            activation: 'relu',
-            padding: 'same',
-            inputShape: [28, 28, 1]
-        }));
-        
-        model.add(tf.layers.conv2d({
-            filters: 64,
-            kernelSize: 3,
-            activation: 'relu',
-            padding: 'same'
-        }));
-        
-        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-        model.add(tf.layers.dropout({ rate: 0.25 }));
-        model.add(tf.layers.flatten());
-        
-        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-        model.add(tf.layers.dropout({ rate: 0.5 }));
-        model.add(tf.layers.dense({ units: 10, activation: 'softmax' }));
-        
-        model.compile({
-            optimizer: 'adam',
-            loss: 'categoricalCrossentropy',
-            metrics: ['accuracy']
-        });
-        
-        return model;
-    }
-
-    async calculateAccuracy(predicted, trueLabels) {
-        const equals = predicted.equal(trueLabels);
-        const accuracy = equals.mean();
-        const result = await accuracy.data();
-        equals.dispose();
-        accuracy.dispose();
-        return result[0];
-    }
-
-    async createConfusionMatrix(predicted, trueLabels) {
-        const predArray = await predicted.array();
-        const trueArray = await trueLabels.array();
-        
-        const matrix = Array(10).fill().map(() => Array(10).fill(0));
-        
-        for (let i = 0; i < predArray.length; i++) {
-            const pred = predArray[i];
-            const trueVal = trueArray[i];
-            matrix[trueVal][pred]++;
-        }
-        
-        return matrix;
-    }
-
-    calculatePerClassAccuracy(confusionMatrix) {
-        return confusionMatrix.map((row, i) => {
-            const correct = row[i];
-            const total = row.reduce((sum, val) => sum + val, 0);
-            return total > 0 ? correct / total : 0;
-        });
-    }
-
-    renderPreview(images, predicted, trueLabels, indices) {
-        const container = document.getElementById('previewContainer');
-        container.innerHTML = '';
-        
-        // Convert tensor to array for processing
-        const imageArray = images.arraySync();
-        
-        imageArray.forEach((image, i) => {
-            const item = document.createElement('div');
-            item.className = 'preview-item';
-            
-            const canvas = document.createElement('canvas');
-            const label = document.createElement('div');
-            
-            const isCorrect = predicted[i] === trueLabels[i];
-            label.className = isCorrect ? 'correct' : 'wrong';
-            label.textContent = `Pred: ${predicted[i]} | True: ${trueLabels[i]}`;
-            
-            // Draw image to canvas
-            this.dataLoader.draw28x28ToCanvas(tf.tensor(image), canvas, 4);
-            
-            item.appendChild(canvas);
-            item.appendChild(label);
-            container.appendChild(item);
-        });
-    }
-
-    clearPreview() {
-        document.getElementById('previewContainer').innerHTML = '';
-    }
-
-    updateDataStatus(trainCount, testCount) {
-        const statusEl = document.getElementById('dataStatus');
-        statusEl.innerHTML = `
-            <h3>Data Status</h3>
-            <p>Train samples: ${trainCount}</p>
-            <p>Test samples: ${testCount}</p>
-        `;
-    }
-
-    updateModelInfo() {
-        const infoEl = document.getElementById('modelInfo');
-        
-        if (!this.model) {
-            infoEl.innerHTML = '<h3>Model Info</h3><p>No model loaded</p>';
-            return;
-        }
-        
-        let totalParams = 0;
-        this.model.layers.forEach(layer => {
-            layer.getWeights().forEach(weight => {
-                totalParams += weight.size;
-            });
-        });
-        
-        infoEl.innerHTML = `
-            <h3>Model Info</h3>
-            <p>Layers: ${this.model.layers.length}</p>
-            <p>Total parameters: ${totalParams.toLocaleString()}</p>
-        `;
-    }
-
-    showStatus(message) {
-        const logs = document.getElementById('trainingLogs');
-        const entry = document.createElement('div');
-        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        logs.appendChild(entry);
-        logs.scrollTop = logs.scrollHeight;
-    }
-
-    showError(message) {
-        this.showStatus(`ERROR: ${message}`);
-        console.error(message);
-    }
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  els.logs.textContent += `[${t}] ${msg}\n`;
+  els.logs.scrollTop = els.logs.scrollHeight;
 }
 
-// Initialize app when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    new MNISTApp();
-});
+function setDataStatus() {
+  const tN = train.xs ? train.xs.shape[0] : 0;
+  const eN = test.xs ? test.xs.shape[0] : 0;
+  els.dataStatus.textContent = `train samples: ${tN} • test samples: ${eN}`;
+}
+
+function buildAutoencoder() {
+  const input = tf.input({ shape: [28, 28, 1] });
+
+  // Encoder
+  let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, strides: 1, padding: 'same', activation: 'relu' }).apply(input);
+  x = tf.layers.maxPooling2d({ poolSize: 2, strides: 2, padding: 'same' }).apply(x);
+  x = tf.layers.conv2d({ filters: 64, kernelSize: 3, strides: 1, padding: 'same', activation: 'relu' }).apply(x);
+  x = tf.layers.maxPooling2d({ poolSize: 2, strides: 2, padding: 'same' }).apply(x);
+
+  // Decoder (upsample with transposed conv)
+  x = tf.layers.conv2dTranspose({ filters: 64, kernelSize: 3, strides: 2, padding: 'same', activation: 'relu' }).apply(x);
+  x = tf.layers.conv2dTranspose({ filters: 32, kernelSize: 3, strides: 2, padding: 'same', activation: 'relu' }).apply(x);
+  const out = tf.layers.conv2d({ filters: 1, kernelSize: 3, padding: 'same', activation: 'sigmoid' }).apply(x);
+
+  const m = tf.model({ inputs: input, outputs: out });
+  m.compile({ optimizer: tf.train.adam(), loss: 'meanSquaredError' });
+
+  els.modelInfo.textContent = `params: ${m.countParams().toLocaleString()} • loss: MSE • optimizer: adam`;
+  return m;
+}
+
+async function trainAutoencoder() {
+  if (!train.xs) return log('Load data first.');
+  if (!model) model = buildAutoencoder();
+
+  const epochs = parseInt(els.epochs.value, 10);
+  const batchSize = parseInt(els.batch.value, 10);
+  const std = parseFloat(els.noiseStd.value);
+
+  const [xsTrain, xsVal] = tf.tidy(() => {
+    // 90/10 split
+    const n = train.xs.shape[0];
+    const nTrain = Math.floor(n * 0.9);
+    const xTrain = train.xs.slice([0, 0, 0, 0], [nTrain, 28, 28, 1]);
+    const xVal = train.xs.slice([nTrain, 0, 0, 0], [n - nTrain, 28, 28, 1]);
+    return [xTrain, xVal];
+  });
+
+  // Noisy inputs; clean targets = original
+  const noisyTrain = addGaussianNoise(xsTrain, std);
+  const noisyVal = addGaussianNoise(xsVal, std);
+
+  const surface = { name: 'Loss', tab: 'Charts' };
+  const fitCallbacks = tfvis.show.fitCallbacks(surface, ['loss', 'val_loss'], { callbacks: ['onEpochEnd'] });
+
+  log(`Training… epochs=${epochs}, batch=${batchSize}, noise σ=${std}`);
+  await model.fit(noisyTrain, xsTrain, {
+    epochs, batchSize, shuffle: true, validationData: [noisyVal, xsVal],
+    callbacks: fitCallbacks
+  });
+  log('Training complete.');
+
+  noisyTrain.dispose(); noisyVal.dispose();
+  xsTrain.dispose(); xsVal.dispose();
+}
+
+function clearPreview() {
+  els.preview.innerHTML = '';
+}
+
+function makeCol() {
+  const col = document.createElement('div');
+  col.className = 'strip-col';
+  const c1 = document.createElement('canvas'); c1.className = 'preview';
+  const c2 = document.createElement('canvas'); c2.className = 'preview';
+  const c3 = document.createElement('canvas'); c3.className = 'preview';
+  col.appendChild(c1); col.appendChild(c2); col.appendChild(c3);
+  return { col, c1, c2, c3 };
+}
+
+function renderFive(noisy, recon, clean) {
+  clearPreview();
+  const k = noisy.shape[0];
+  for (let i = 0; i < k; i++) {
+    const { col, c1, c2, c3 } = makeCol();
+    els.preview.appendChild(col);
+
+    const n = noisy.slice([i,0,0,0],[1,28,28,1]).squeeze();
+    const r = recon.slice([i,0,0,0],[1,28,28,1]).squeeze();
+    const c = clean.slice([i,0,0,0],[1,28,28,1]).squeeze();
+
+    draw28x28ToCanvas(n, c1, 4);
+    draw28x28ToCanvas(r, c2, 4);
+    draw28x28ToCanvas(c, c3, 4);
+
+    n.dispose(); r.dispose(); c.dispose();
+  }
+}
+
+async function testFive() {
+  if (!test.xs) return log('Load data first.');
+  if (!model) return log('Train or load a model first.');
+
+  const std = parseFloat(els.noiseStd.value);
+  const { batch } = sampleBatch(test.xs, 5);
+  const noisy = addGaussianNoise(batch, std);
+  const recon = model.predict(noisy);
+
+  renderFive(noisy, recon, batch);
+
+  batch.dispose(); noisy.dispose(); recon.dispose();
+}
+
+function evaluateMSE() {
+  if (!test.xs || !model) return log('Need test data and a model.');
+  const std = parseFloat(els.noiseStd.value);
+
+  const pred = tf.tidy(() => {
+    const noisy = addGaussianNoise(test.xs, std);
+    const y = model.predict(noisy);
+    noisy.dispose();
+    return y;
+  });
+  const loss = tf.losses.meanSquaredError(test.xs, pred).mean();
+  loss.data().then(v => log(`Test MSE @ σ=${std}: ${v[0].toFixed(6)}`));
+  pred.dispose();
+}
+
+async function saveModel() {
+  if (!model) return log('No model to save.');
+  await model.save('downloads://mnist_denoiser');
+  log('Model saved (downloaded).');
+}
+
+async function loadModelFromFiles() {
+  const json = els.modelJson.files[0];
+  const bin = els.modelWeights.files[0];
+  if (!json || !bin) return log('Choose both model.json and weights.bin.');
+  model = await tf.loadLayersModel(tf.io.browserFiles([json, bin]));
+  els.modelInfo.textContent = `loaded • params: ${model.countParams().toLocaleString()}`;
+  log('Model loaded from files.');
+}
+
+function resetAll() {
+  clearPreview();
+  els.logs.textContent = '';
+  els.modelInfo.textContent = '[not built]';
+  if (model) { model.dispose(); model = null; }
+  if (train.xs) { train.xs.dispose(); train.ys.dispose(); train = { xs:null, ys:null }; }
+  if (test.xs)  { test.xs.dispose();  test.ys.dispose();  test  = { xs:null, ys:null }; }
+  els.dataStatus.textContent = '[not loaded]';
+  tfvis.visor().close();
+  log('Reset complete.');
+}
+
+function toggleVisor() {
+  const v = tfvis.visor();
+  v.isOpen() ? v.close() : v.open();
+}
+
+async function loadData() {
+  if (!els.trainCsv.files[0] || !els.testCsv.files[0]) {
+    return log('Pick both Train and Test CSV files.');
+  }
+  if (train.xs) { train.xs.dispose(); train.ys.dispose(); }
+  if (test.xs)  { test.xs.dispose();  test.ys.dispose(); }
+
+  log('Loading data…');
+  train = await readCsvFile(els.trainCsv.files[0]);
+  test  = await readCsvFile(els.testCsv.files[0]);
+  setDataStatus();
+  log('Data loaded successfully.');
+}
+
+els.btnLoad.addEventListener('click', loadData);
+els.btnTrain.addEventListener('click', () => trainAutoencoder().catch(e => log(String(e))));
+els.btnTest5.addEventListener('click', () => testFive().catch(e => log(String(e))));
+els.btnEval.addEventListener('click', evaluateMSE);
+els.btnSave.addEventListener('click', saveModel);
+els.btnLoadModel.addEventListener('click', () => loadModelFromFiles().catch(e => log(String(e))));
+els.btnReset.addEventListener('click', resetAll);
+els.btnVisor.addEventListener('click', toggleVisor);
+
+log('Ready.');
