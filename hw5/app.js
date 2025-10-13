@@ -96,27 +96,49 @@
     }
 
     async onTestFive(){
-      if(!this.model || !this.data.testData){ log('ERROR: Need model and test data'); return; }
-      const std = parseFloat(document.getElementById('noiseStd').value)||0.5;
-      const {batchXs} = this.data.getRandomTestBatch(this.data.testData.xs,5);
-      const noisy = this.data.addGaussianNoise(batchXs, std);
-      const recon = this.model.predict(noisy);
-      const cont = document.getElementById('previewContainer');
-      cont.innerHTML='';
-      for(let i=0;i<5;i++){
-        const col = document.createElement('div'); col.className='preview-item';
-        const c1=document.createElement('canvas'), c2=document.createElement('canvas'), c3=document.createElement('canvas');
-        const n = noisy.slice([i,0,0,0],[1,28,28,1]).squeeze();
-        const r = recon.slice([i,0,0,0],[1,28,28,1]).squeeze();
-        const c = batchXs.slice([i,0,0,0],[1,28,28,1]).squeeze();
-        this.data.draw28x28ToCanvas(n,c1,4);
-        this.data.draw28x28ToCanvas(r,c2,4);
-        this.data.draw28x28ToCanvas(c,c3,4);
-        col.append(c1,c2,c3); cont.appendChild(col);
-        n.dispose(); r.dispose(); c.dispose();
-      }
-      noisy.dispose(); recon.dispose(); batchXs.dispose();
+  try {
+    if (!this.model || !this.data.testData) { log('ERROR: Need model and test data'); return; }
+    const std = parseFloat(document.getElementById('noiseStd').value) || 0.5;
+
+    // sample
+    const { batchXs, count } = this.data.getRandomTestBatch(this.data.testData.xs, 5);
+    log(`Rendering ${count} random samples @ σ=${std} …`);
+
+    // noisy → reconstruct
+    const noisy = this.data.addGaussianNoise(batchXs, std);
+    const recon = this.model.predict(noisy);
+
+    // draw
+    const cont = document.getElementById('previewContainer');
+    cont.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const col = document.createElement('div'); col.className = 'preview-item';
+      const c1 = document.createElement('canvas');
+      const c2 = document.createElement('canvas');
+      const c3 = document.createElement('canvas');
+
+      const n = noisy.slice([i,0,0,0],[1,28,28,1]).squeeze();
+      const r = recon.slice([i,0,0,0],[1,28,28,1]).squeeze();
+      const c = batchXs.slice([i,0,0,0],[1,28,28,1]).squeeze();
+
+      this.data.draw28x28ToCanvas(n, c1, 4);
+      this.data.draw28x28ToCanvas(r, c2, 4);
+      this.data.draw28x28ToCanvas(c, c3, 4);
+
+      col.append(c1, c2, c3);
+      cont.appendChild(col);
+
+      n.dispose(); r.dispose(); c.dispose();
     }
+
+    noisy.dispose(); recon.dispose(); batchXs.dispose();
+    log('Preview rendered.');
+  } catch (e) {
+    log('ERROR in Test 5 Random: ' + e.message);
+    console.error(e);
+  }
+}
+
 
     async onSave(){
       if(!this.model){ log('ERROR: No model to save'); return; }
