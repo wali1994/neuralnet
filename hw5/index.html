@@ -1,107 +1,80 @@
-
 <!-- index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <title>MNIST Denoiser (Autoencoder, Client-Side)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- TFJS + Vis -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@1.5.1/dist/tfjs-vis.umd.min.js"></script>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px;line-height:1.35}
-    h1{margin:0 0 8px}
-    small{color:#666}
-    .grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
-    .card{border:1px solid #ddd;border-radius:10px;padding:12px}
-    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-    .row > *{margin:2px 0}
-    .tag{background:#f4f4f4;border:1px solid #e3e3e3;border-radius:6px;padding:2px 6px}
-    canvas.preview{image-rendering:pixelated;border:1px solid #ddd;background:#fff}
-    .strip{display:flex;gap:6px}
-    .strip-col{display:flex;flex-direction:column;gap:6px;align-items:center}
-    .muted{color:#888}
-    .right{display:flex;justify-content:flex-end}
-    .w100{width:100%}
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:20px}
+    .container{display:flex;gap:20px}
+    .left-column,.right-column{flex:1}
+    .status{background:#f7f7f7;border:1px solid #e7e7e7;border-radius:8px;padding:10px;margin:10px 0}
+    .file-inputs label{margin-right:10px}
+    .preview-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+    .preview-item{display:flex;flex-direction:column;align-items:center;gap:6px}
+    canvas{border:1px solid #ccc;image-rendering:pixelated;background:#fff}
+    .tag{background:#f2f2f2;border:1px solid #e3e3e3;border-radius:6px;padding:3px 6px;display:inline-flex;align-items:center;margin-right:8px}
+    .tag input{width:64px;margin-left:6px}
+    button{margin:4px 4px 4px 0;padding:8px 12px}
+    small.muted{color:#888}
   </style>
 </head>
 <body>
   <h1>Homework: Train Denoiser with Autoencoder</h1>
-  <div class="grid">
-    <!-- Left column: controls -->
-    <div class="card">
-      <h3>Controls</h3>
-      <div class="row">
-        <label class="tag">Upload Train CSV
-          <input id="trainCsv" type="file" accept=".csv" />
-        </label>
-        <label class="tag">Upload Test CSV
-          <input id="testCsv" type="file" accept=".csv" />
-        </label>
-        <button id="btnLoad">Load Data</button>
+
+  <div class="file-inputs">
+    <label>Upload Train CSV: <input type="file" id="trainFile" accept=".csv"></label>
+    <label>Upload Test CSV: <input type="file" id="testFile" accept=".csv"></label>
+    <button id="loadDataBtn">Load Data</button>
+  </div>
+
+  <div class="container">
+    <div class="left-column">
+      <h2>Controls</h2>
+      <div>
+        <span class="tag">Noise σ <input id="noiseStd" type="number" step="0.05" value="0.5"></span>
+        <span class="tag">Epochs <input id="epochs" type="number" value="8"></span>
+        <span class="tag">Batch <input id="batch" type="number" value="128"></span>
+      </div>
+      <div>
+        <button id="trainBtn">Train Autoencoder</button>
+        <button id="evaluateBtn">Evaluate (MSE)</button>
+        <button id="testFiveBtn">Test 5 Random</button>
+        <button id="saveModelBtn">Save Model</button>
+        <button id="resetBtn">Reset</button>
+        <button id="toggleVisorBtn">Toggle Visor</button>
       </div>
 
-      <div class="row" style="margin-top:8px">
-        <label class="tag">Noise σ
-          <input id="noiseStd" type="number" step="0.05" value="0.5" style="width:64px;margin-left:6px" />
-        </label>
-        <label class="tag">Epochs
-          <input id="epochs" type="number" value="8" style="width:64px;margin-left:6px" />
-        </label>
-        <label class="tag">Batch
-          <input id="batch" type="number" value="128" style="width:72px;margin-left:6px" />
-        </label>
+      <div>
+        <label>Load model.json: <input type="file" id="modelJsonFile" accept=".json"></label>
+        <label>Load weights.bin: <input type="file" id="modelWeightsFile" accept=".bin"></label>
+        <button id="loadModelBtn">Load Model</button>
       </div>
 
-      <div class="row" style="margin-top:8px">
-        <button id="btnTrain">Train Autoencoder</button>
-        <button id="btnTest5">Test 5 Random</button>
-        <button id="btnEval">Evaluate (MSE)</button>
+      <div id="dataStatus" class="status">
+        <h3>Data Status</h3>
+        <p>No data loaded</p>
       </div>
 
-      <hr>
-      <div class="row">
-        <button id="btnSave">Save Model (Download)</button>
-        <label class="tag">Load model.json
-          <input id="modelJson" type="file" accept=".json" />
-        </label>
-        <label class="tag">Load weights.bin
-          <input id="modelWeights" type="file" />
-        </label>
-        <button id="btnLoadModel">Load Model (From Files)</button>
+      <div id="modelInfo" class="status">
+        <h3>Model Info</h3>
+        <p>No model loaded</p>
       </div>
-
-      <hr>
-      <div class="row">
-        <button id="btnReset">Reset</button>
-        <button id="btnVisor">Toggle Visor</button>
-      </div>
-
-      <h4 style="margin-top:16px">Data Status</h4>
-      <div id="dataStatus" class="mono muted">[not loaded]</div>
-
-      <h4 style="margin-top:12px">Model Info</h4>
-      <div id="modelInfo" class="mono muted">[not built]</div>
     </div>
 
-    <!-- Right column: logs + preview -->
-    <div class="card">
-      <div class="row right">
-        <small class="muted">All client-side • no network fetch • CSV only</small>
-      </div>
-      <h3>Training Logs</h3>
-      <div id="logs" class="mono"></div>
-      <div id="charts"></div>
+    <div class="right-column">
+      <h2>Training Logs</h2>
+      <div id="trainingLogs"></div>
 
-      <h3 style="margin-top:12px">Random 5 Preview</h3>
-      <small class="muted">Rows: Noisy (top) • Reconstructed (middle) • Clean (bottom)</small>
-      <div id="preview" class="strip" style="margin-top:6px"></div>
+      <h2>Random 5 Preview</h2>
+      <small class="muted">Columns (per sample): Noisy → Reconstructed → Clean</small>
+      <div id="previewContainer" class="preview-row"></div>
     </div>
   </div>
 
-  <script src="./data-loader.js"></script>
-  <script src="./app.js"></script>
+  <script src="data-loader.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
