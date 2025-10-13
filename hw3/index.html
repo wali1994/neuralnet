@@ -1,72 +1,104 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>MNIST CNN with TensorFlow.js</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@latest"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { display: flex; gap: 20px; }
-        .left-column, .right-column { flex: 1; }
-        .preview-row { display: flex; gap: 10px; margin: 10px 0; }
-        .preview-item { text-align: center; }
-        canvas { border: 1px solid #ccc; image-rendering: pixelated; }
-        .correct { color: green; font-weight: bold; }
-        .wrong { color: red; font-weight: bold; }
-        button { margin: 5px; padding: 8px 12px; }
-        .file-inputs { margin: 10px 0; }
-        .status { background: #f0f0f0; padding: 10px; margin: 10px 0; }
-    </style>
+  <meta charset="utf-8" />
+  <title>MNIST Classifier + Denoiser (Client-Side)</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@1.5.1/dist/tfjs-vis.umd.min.js"></script>
+
+  <style>
+    :root { --card:#f7f7f7; --border:#e6e6e6; --muted:#666; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 18px; }
+    h1 { margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0; }
+    .row label { font-size: 14px; }
+    button { padding: 8px 12px; border: 1px solid var(--border); background: white; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #fafafa; }
+    .status { white-space: pre-wrap; background: #fff; border: 1px dashed var(--border); border-radius: 8px; padding: 8px; min-height: 44px; }
+    .muted { color: var(--muted); }
+    #preview-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+    .preview-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    canvas { border: 1px solid var(--border); background: #fff; image-rendering: pixelated; }
+    .correct { color: #137333; font-weight: 600; }
+    .wrong { color: #b00020; font-weight: 600; }
+    #model-info { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; white-space: pre; }
+  </style>
 </head>
 <body>
-    <h1>MNIST CNN Training (Client-Side)</h1>
-    
-    <div class="file-inputs">
-        <label>Upload Train CSV: <input type="file" id="trainFile" accept=".csv"></label>
-        <label>Upload Test CSV: <input type="file" id="testFile" accept=".csv"></label>
-        <button id="loadDataBtn">Load Data</button>
+  <h1>MNIST Classifier + CNN Denoiser</h1>
+  <div class="grid">
+    <!-- Left column: controls -->
+    <div class="card">
+      <h3>Data</h3>
+      <div class="row">
+        <label>Train CSV: <input type="file" id="train-csv" accept=".csv" /></label>
+      </div>
+      <div class="row">
+        <label>Test CSV: <input type="file" id="test-csv" accept=".csv" /></label>
+      </div>
+      <div class="row">
+        <button id="load-data">Load Data</button>
+      </div>
+
+      <h3 style="margin-top:12px">Train</h3>
+      <div class="row">
+        <button id="train-cnn">Train CNN (Classifier)</button>
+        <button id="train-denoiser">Train Denoiser (Autoencoder)</button>
+      </div>
+
+      <h3 style="margin-top:12px">Evaluate & Preview</h3>
+      <div class="row">
+        <button id="evaluate">Evaluate (Accuracy & Charts)</button>
+        <button id="test-five">Test 5 Random</button>
+      </div>
+
+      <h3 style="margin-top:12px">Model I/O</h3>
+      <div class="row">
+        <button id="save-model">Save Model(s)</button>
+      </div>
+      <div class="row">
+        <label>model.json: <input type="file" id="upload-json" accept=".json" /></label>
+      </div>
+      <div class="row">
+        <label>weights.bin: <input type="file" id="upload-weights" /></label>
+      </div>
+      <div class="row">
+        <button id="load-model">Load Model</button>
+      </div>
+
+      <h3 style="margin-top:12px">Utilities</h3>
+      <div class="row">
+        <button id="toggle-visor">Toggle tfjs-vis</button>
+        <button id="reset">Reset</button>
+      </div>
+
+      <h3 style="margin-top:12px">Status</h3>
+      <div id="data-status" class="status">No data loaded.</div>
+
+      <h3 style="margin-top:12px">Model Info</h3>
+      <div id="model-info" class="status">—</div>
     </div>
 
-    <div class="container">
-        <div class="left-column">
-            <h2>Controls</h2>
-            <div>
-                <button id="trainBtn">Train</button>
-                <button id="evaluateBtn">Evaluate</button>
-                <button id="testFiveBtn">Test 5 Random</button>
-                <button id="saveModelBtn">Save Model</button>
-                <button id="resetBtn">Reset</button>
-                <button id="toggleVisorBtn">Toggle Visor</button>
-            </div>
-            
-            <div>
-                <label>Load Model JSON: <input type="file" id="modelJsonFile" accept=".json"></label>
-                <label>Load Model Weights: <input type="file" id="modelWeightsFile" accept=".bin"></label>
-                <button id="loadModelBtn">Load Model</button>
-            </div>
+    <!-- Right column: logs + preview -->
+    <div class="card">
+      <h3>Training Logs</h3>
+      <div id="training-logs" class="status"></div>
 
-            <div id="dataStatus" class="status">
-                <h3>Data Status</h3>
-                <p>No data loaded</p>
-            </div>
+      <h3 style="margin-top:12px">Metrics</h3>
+      <div id="metrics" class="status"></div>
 
-            <div id="modelInfo" class="status">
-                <h3>Model Info</h3>
-                <p>No model loaded</p>
-            </div>
-        </div>
-
-        <div class="right-column">
-            <h2>Training Logs</h2>
-            <div id="trainingLogs"></div>
-            
-            <h2>Random 5 Preview</h2>
-            <div id="previewContainer" class="preview-row"></div>
-        </div>
+      <h3 style="margin-top:12px">Random 5 Preview</h3>
+      <div class="muted">Each item shows: Original • Noisy • (Denoised if trained) • Pred vs GT</div>
+      <div id="preview-row"></div>
     </div>
+  </div>
 
-    <script src="data-loader.js"></script>
-    <script src="app.js"></script>
+  <!-- Your scripts (keep exact filenames with spaces) -->
+  <script src="data-loader (2).js"></script>
+  <script src="app (3).js"></script>
 </body>
 </html>
-
