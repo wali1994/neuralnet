@@ -1,141 +1,68 @@
-class MNISTDataLoader {
-    constructor() {
-        this.trainData = null;
-        this.testData = null;
-    }
+// data-loader.js
+// CSV: label, p0..p783 (0..255), no header
+async function readCsvFile(file) {
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const n = lines.length;
 
-    // Parse CSV file and convert to tensors
-    async loadCSVFile(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            
-            reader.onload = (event) => {
-                try {
-                    const content = event.target.result;
-                    const lines = content.split('\n').filter(line => line.trim() !== '');
-                    
-                    const labels = [];
-                    const pixels = [];
-                    
-                    for (const line of lines) {
-                        const values = line.split(',').map(Number);
-                        if (values.length !== 785) continue; // label + 784 pixels
-                        
-                        labels.push(values[0]);
-                        pixels.push(values.slice(1));
-                    }
-                    
-                    if (labels.length === 0) {
-                        reject(new Error('No valid data found in file'));
-                        return;
-                    }
-                    
-                    // Normalize pixels to [0, 1] and reshape to [N, 28, 28, 1]
-                    const xs = tf.tidy(() => {
-                        return tf.tensor2d(pixels)
-                            .div(255)
-                            .reshape([labels.length, 28, 28, 1]);
-                    });
-                    
-                    // One-hot encode labels
-                    const ys = tf.tidy(() => {
-                        return tf.oneHot(labels, 10);
-                    });
-                    
-                    resolve({ xs, ys, count: labels.length });
-                } catch (error) {
-                    reject(error);
-                }
-            };
-            
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsText(file);
-        });
-    }
+  const xs = new Float32Array(n * 784);
+  const ys = new Int32Array(n);
 
-    async loadTrainFromFiles(file) {
-        this.trainData = await this.loadCSVFile(file);
-        return this.trainData;
+  let xi = 0, yi = 0;
+  for (const line of lines) {
+    const parts = line.split(/[,;\s]+/).filter(Boolean);
+    ys[yi++] = parseInt(parts[0], 10);
+    for (let j = 1; j <= 784; j++) {
+      xs[xi++] = parseFloat(parts[j]) / 255.0;
     }
+  }
 
-    async loadTestFromFiles(file) {
-        this.testData = await this.loadCSVFile(file);
-        return this.testData;
-    }
-
-    // Split training data into train/validation sets
-    splitTrainVal(xs, ys, valRatio = 0.1) {
-        return tf.tidy(() => {
-            const numVal = Math.floor(xs.shape[0] * valRatio);
-            const numTrain = xs.shape[0] - numVal;
-            
-            const trainXs = xs.slice([0, 0, 0, 0], [numTrain, 28, 28, 1]);
-            const trainYs = ys.slice([0, 0], [numTrain, 10]);
-            
-            const valXs = xs.slice([numTrain, 0, 0, 0], [numVal, 28, 28, 1]);
-            const valYs = ys.slice([numTrain, 0], [numVal, 10]);
-            
-            return { trainXs, trainYs, valXs, valYs };
-        });
-    }
-
-    // Get random batch for preview
-    getRandomTestBatch(xs, ys, k = 5) {
-        return tf.tidy(() => {
-            const shuffledIndices = tf.util.createShuffledIndices(xs.shape[0]);
-            const selectedIndices = Array.from(shuffledIndices.slice(0, k));
-            
-            const batchXs = tf.gather(xs, selectedIndices);
-            const batchYs = tf.gather(ys, selectedIndices);
-            
-            return { batchXs, batchYs, indices: selectedIndices };
-        });
-    }
-
-    // Draw 28x28 tensor to canvas
-    draw28x28ToCanvas(tensor, canvas, scale = 4) {
-        return tf.tidy(() => {
-            const ctx = canvas.getContext('2d');
-            const imageData = new ImageData(28, 28);
-            
-            // Ensure tensor is 2D and denormalize
-            const data = tensor.reshape([28, 28]).mul(255).dataSync();
-            
-            for (let i = 0; i < 784; i++) {
-                const val = data[i];
-                imageData.data[i * 4] = val;     // R
-                imageData.data[i * 4 + 1] = val; // G
-                imageData.data[i * 4 + 2] = val; // B
-                imageData.data[i * 4 + 3] = 255; // A
-            }
-            
-            // Scale up for better visibility
-            canvas.width = 28 * scale;
-            canvas.height = 28 * scale;
-            ctx.imageSmoothingEnabled = false;
-            
-            // Create temporary canvas for scaling
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = 28;
-            tempCanvas.height = 28;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.putImageData(imageData, 0, 0);
-            
-            ctx.drawImage(tempCanvas, 0, 0, 28 * scale, 28 * scale);
-        });
-    }
-
-    // Clean up stored data
-    dispose() {
-        if (this.trainData) {
-            this.trainData.xs.dispose();
-            this.trainData.ys.dispose();
-            this.trainData = null;
-        }
-        if (this.testData) {
-            this.testData.xs.dispose();
-            this.testData.ys.dispose();
-            this.testData = null;
-        }
-    }
+  const xsTensor = tf.tensor4d(xs, [n, 28, 28, 1]);
+  const ysTensor = tf.tensor1d(ys, 'int32');
+  return { xs: xsTensor, ys: ysTensor }; // labels unused for denoiser, kept for sampling
 }
+
+function addGaussianNoise(x, std = 0.5) {
+  // x in [0,1]; return clipped x + N(0, std)
+  return tf.tidy(() => {
+    const noise = tf.randomNormal(x.shape, 0, std, 'float32');
+    const y = tf.add(x, noise);
+    return tf.clipByValue(y, 0, 1);
+  });
+}
+
+function draw28x28ToCanvas(t, canvas, scale = 4) {
+  const [h, w] = [28, 28];
+  if (!canvas) return;
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const ctx = canvas.getContext('2d');
+  const data = t.dataSync();
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.round(data[i] * 255);
+    img.data[i * 4 + 0] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  // scale up
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  off.getContext('2d').putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(off, 0, 0, w * scale, h * scale);
+}
+
+function sampleBatch(xs, k = 5) {
+  const n = xs.shape[0];
+  const idx = [];
+  for (let i = 0; i < k; i++) idx.push(Math.floor(Math.random() * n));
+  const gather = tf.tensor1d(idx, 'int32');
+  const batch = tf.gather(xs, gather);
+  gather.dispose();
+  return { batch, idx };
+}
+
+export { readCsvFile, addGaussianNoise, draw28x28ToCanvas, sampleBatch };
