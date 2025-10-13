@@ -54,13 +54,20 @@
       return tf.tidy(()=> tf.clipByValue(x.add(tf.randomNormal(x.shape,0,std,'float32')),0,1));
     }
 
-    getRandomTestBatch(xs,k=5){
-      return tf.tidy(()=>{
-        const idx = tf.util.createShuffledIndices(xs.shape[0]).slice(0,k);
-        const batch = tf.gather(xs, idx);
-        return { batchXs: batch, indices: idx };
-      });
-    }
+    getRandomTestBatch(xs, k = 5){
+  return tf.tidy(() => {
+    const n = xs.shape[0];
+    const kk = Math.min(k, n);
+    if (kk === 0) { throw new Error('Test set has 0 samples'); }
+
+    // tf.gather works best with a Tensor index; don’t pass a raw array
+    const idxArr = tf.util.createShuffledIndices(n).slice(0, kk);
+    const idx = tf.tensor1d(Array.from(idxArr), 'int32');
+    const batch = tf.gather(xs, idx);
+    idx.dispose();
+    return { batchXs: batch, count: kk };
+  });
+}
 
     draw28x28ToCanvas(t, canvas, scale=4){
       const ctx = canvas.getContext('2d');
