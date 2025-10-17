@@ -1,1 +1,99 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Emotion Recognition (MLP • TF.js)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@1.5.1/dist/tfjs-vis.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Emotion Recognition from Text <span class="badge">MLP • TensorFlow.js</span></h1>
+    <p class="muted">Upload Kaggle “Emotions Dataset for NLP” files (<code>train.txt</code>, <code>val.txt</code>, <code>test.txt</code>). All runs in your browser.</p>
+  </header>
+
+  <main class="grid">
+    <!-- Controls -->
+    <section class="card">
+      <h2>1) Dataset</h2>
+      <div class="row">
+        <label class="file">Train.txt <input type="file" id="trainFile" accept=".txt" /></label>
+        <label class="file">Val.txt <input type="file" id="valFile" accept=".txt" /></label>
+        <label class="file">Test.txt <input type="file" id="testFile" accept=".txt" /></label>
+      </div>
+      <div class="row">
+        <button id="btnLoad">Load Data</button>
+        <span id="dataStatus" class="status">No data loaded</span>
+      </div>
+
+      <h2>2) Train</h2>
+      <div class="row">
+        <label class="chip">Vocab
+          <input id="vocabSize" type="number" value="10000" min="1000" step="1000">
+        </label>
+        <label class="chip">Max Len
+          <input id="maxLen" type="number" value="30" min="10" max="80">
+        </label>
+        <label class="chip">Epochs
+          <input id="epochs" type="number" value="10" min="1" max="50">
+        </label>
+        <label class="chip">Batch
+          <input id="batch" type="number" value="64" min="16" max="512">
+        </label>
+      </div>
+      <div class="row">
+        <button id="btnTrain">Train MLP</button>
+        <button id="btnEval">Evaluate</button>
+        <button id="btnReset" class="ghost">Reset</button>
+      </div>
+
+      <h2>3) Model I/O</h2>
+      <div class="row">
+        <button id="btnSaveModel">Save Model</button>
+        <button id="btnSaveTok">Save Tokenizer</button>
+      </div>
+      <div class="row">
+        <label class="file">model.json <input type="file" id="modelJson" accept=".json" /></label>
+        <label class="file">weights.bin <input type="file" id="modelWeights" /></label>
+        <label class="file">tokenizer.json <input type="file" id="tokJson" accept=".json" /></label>
+      </div>
+      <div class="row">
+        <button id="btnLoadModel">Load Model + Tokenizer</button>
+      </div>
+
+      <h2>4) Predict</h2>
+      <div class="row col">
+        <textarea id="predictText" rows="3" placeholder="Type a sentence… e.g., I am so happy to see you!"></textarea>
+        <button id="btnPredict">Predict Emotion</button>
+      </div>
+    </section>
+
+    <!-- Right: Logs + Charts + Preview -->
+    <section class="card">
+      <h2>Training Logs</h2>
+      <pre id="logs" class="logs"></pre>
+
+      <h2 style="margin-top:12px">Charts</h2>
+      <div id="charts"></div>
+
+      <h2 style="margin-top:12px">Results</h2>
+      <div id="results" class="results"></div>
+
+      <h2 style="margin-top:12px">Prediction</h2>
+      <div id="predOut" class="pred"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>All client-side • No data leaves your browser.</span>
+    <a href="https://github.com/" target="_blank" rel="noopener">GitHub Pages ready</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
 
