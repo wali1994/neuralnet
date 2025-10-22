@@ -1,19 +1,21 @@
-// ==============================
+// ========================================
 // Emotion Recognition (TF.js) - COMPLETE app.js
-// ==============================
+// CNN + MLP with dataset-derived labels
+// ========================================
 
-/* Labels you expect from the dataset */
-const EMOTIONS = ["joy","sadness","anger","fear","love","surprise"];
+// Labels will be inferred from train.txt at load time.
+let LABELS = [];                          // e.g., ["sadness","joy","love","anger","fear","surprise"]
+let label2id = Object.create(null);       // { label -> index }
 
-/* Global app state */
+// Global app state
 const state = {
-  train: null, val: null, test: null,          // raw items [{text,label}]
-  trainT: null, valT: null, testT: null,       // tensors
+  train: null, val: null, test: null,     // raw items [{text,label}]
+  trainT: null, valT: null, testT: null,  // tensors
   tokenizer: null, model: null,
   maxLen: 30, vocabSize: 10000,
 };
 
-/* UI elements */
+// UI elements
 const els = {
   trainFile: document.getElementById('trainFile'),
   valFile: document.getElementById('valFile'),
@@ -44,31 +46,27 @@ const els = {
   predOut: document.getElementById('predOut'),
 };
 
-/* Logger */
+// ---------- utils ----------
 function log(msg){
   els.logs.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
   els.logs.scrollTop = els.logs.scrollHeight;
 }
 
-/* --- Tokenization helpers (simple, fast, browser-safe) --- */
 function tokenizeBasic(s){
-  // lowercase, keep letters/numbers/underscore + spaces, drop punctuation
+  // lower, keep word chars+spaces; remove punctuation
   return s.toLowerCase().replace(/[^\w\s’']/g,' ').split(/\s+/).filter(Boolean);
 }
 
-/* --- Robust dataset reader for .txt (tab or other delimiters) --- */
+// Robust .txt reader (tab/comma/semicolon/multi-space; header/BOM-safe)
 async function readTxtFile(file){
   const txt = await file.text();
-  const lines = txt
-    .split(/\r?\n/)
-    .map(l => l.replace(/^\uFEFF/, '')) // strip BOM
-    .filter(l => l.trim().length);
+  const lines = txt.split(/\r?\n/).map(l => l.replace(/^\uFEFF/, '')).filter(l => l.trim().length);
 
   const items = [];
   for (let i=0;i<lines.length;i++){
     const raw = lines[i];
 
-    // Try tab, comma, semicolon, or 2+ spaces
+    // Try common delimiters first
     let parts = raw.split(/\t|,|;|\s{2,}/);
     if (parts.length < 2){
       // fallback: split on last whitespace chunk
@@ -80,20 +78,19 @@ async function readTxtFile(file){
     const first = parts[0].trim().toLowerCase();
     const last  = parts[parts.length-1].trim().toLowerCase();
 
-    // Skip header like "text<TAB>label"
+    // Skip possible header
     if (i === 0 && (first === 'text' || first === 'sentence') && last === 'label') continue;
 
-    // Assume label is last field
     const label = last;
     const text  = parts.slice(0, parts.length-1).join(' ').trim();
 
-    if (!text || !EMOTIONS.includes(label)) continue; // filter unknown labels
+    if (!text) continue;         // accept any label for now; we filter after inferring LABELS
     items.push({ text, label });
   }
   return items;
 }
 
-/* --- Tokenizer (frequency based) --- */
+// Build a simple frequency-based tokenizer
 function buildTokenizer(samples, vocabSize){
   const freq = new Map();
   for (const s of samples){
@@ -119,46 +116,57 @@ function buildTokenizer(samples, vocabSize){
   };
 }
 
-/* --- Convert items -> tensors --- */
+// Infer label set/order from training split
+function inferLabelsFromTrain(trainItems){
+  const set = new Set();
+  for (const it of trainItems) set.add(it.label);
+  LABELS = Array.from(set).sort(); // stable order (alphabetical)
+  label2id = Object.create(null);
+  LABELS.forEach((lab, i) => label2id[lab] = i);
+  return LABELS.length;
+}
+
+// Convert items to tensors (xs=int32 indices for embedding; ys=int32 class ids)
 function toXY(items, tokenizer, maxLen){
-  const X = new Float32Array(items.length * maxLen);
+  const X = new Int32Array(items.length * maxLen);
   const y = new Int32Array(items.length);
   for (let i=0;i<items.length;i++){
     const seq = tokenizer.toSeq(items[i].text, maxLen);
     X.set(seq, i*maxLen);
-    y[i] = EMOTIONS.indexOf(items[i].label);
+    y[i] = label2id[items[i].label];
   }
-  const xs = tf.tensor2d(X, [items.length, maxLen], 'int32');
+  const xs = tf.tensor2d(X, [items.length, maxLen], 'int32'); // embedding likes int32
   const ys = tf.tensor1d(y, 'int32');
   return { xs, ys };
 }
 
-/* --- CNN + MLP Hybrid model --- */
+// ---------- Model (CNN + MLP; dropout removed for dtype stability) ----------
 function buildModel(vocabSize, maxLen, numClasses){
   const input = tf.input({shape:[maxLen]});
 
-  // Embedding
+  // Embedding -> float32
   let x = tf.layers.embedding({
     inputDim: vocabSize,
     outputDim: 128,
     inputLength: maxLen
   }).apply(input); // [B, L, 128]
 
-  // Multi-kernel Conv1D + GlobalMaxPool
+  // Multi-kernel conv + global max pool
   const convs = [3,4,5].map(k => {
     const c = tf.layers.conv1d({
-      filters: 128, kernelSize: k, activation: 'relu', padding: 'valid'
+      filters: 128,
+      kernelSize: k,
+      activation: 'relu',
+      padding: 'valid'
     }).apply(x);
     return tf.layers.globalMaxPooling1d().apply(c); // [B, 128]
   });
 
-  // Concatenate + Dropout
-  let feat = tf.layers.concatenate().apply(convs);  // [B, 384]
-  feat = tf.layers.dropout({rate: 0.5}).apply(feat);
+  // Concatenate conv channels
+  let feat = tf.layers.concatenate().apply(convs); // [B, 384]
 
-  // MLP classifier head
+  // MLP head
   feat = tf.layers.dense({units:128, activation:'relu'}).apply(feat);
-  feat = tf.layers.dropout({rate:0.3}).apply(feat);
   feat = tf.layers.dense({units:64, activation:'relu'}).apply(feat);
 
   const out = tf.layers.dense({units:numClasses, activation:'softmax'}).apply(feat);
@@ -172,21 +180,20 @@ function buildModel(vocabSize, maxLen, numClasses){
   return model;
 }
 
-/* --- Confusion matrix renderer --- */
+// ---------- Render helpers ----------
 function showConfusionMatrix(yTrue, yPred){
-  const K = EMOTIONS.length;
+  const K = LABELS.length;
   const M = Array.from({length:K}, ()=>Array(K).fill(0));
   for (let i=0;i<yTrue.length;i++) M[yTrue[i]][yPred[i]]++;
-  let html = `<table class="cm"><tr><th></th>${EMOTIONS.map(e=>`<th>${e}</th>`).join('')}</tr>`;
-  for (let r=0;r<K;r++){ html += `<tr><th>${EMOTIONS[r]}</th>${M[r].map(n=>`<td>${n}</td>`).join('')}</tr>`; }
+  let html = `<table class="cm"><tr><th></th>${LABELS.map(e=>`<th>${e}</th>`).join('')}</tr>`;
+  for (let r=0;r<K;r++){ html += `<tr><th>${LABELS[r]}</th>${M[r].map(n=>`<td>${n}</td>`).join('')}</tr>`; }
   html += `</table>`;
   els.results.innerHTML = html;
 }
 
-/* --- Prediction bars --- */
 function renderPrediction(probs){
   const arr = Array.from(probs);
-  const pairs = EMOTIONS.map((e,i)=>({emo:e,p:arr[i]})).sort((a,b)=>b.p-a.p);
+  const pairs = LABELS.map((e,i)=>({emo:e,p:arr[i]})).sort((a,b)=>b.p-a.p);
   let html = `<div class="bars">`;
   for (const {emo,p} of pairs){
     html += `<div>${emo}</div><div class="bar"><div class="fill" style="width:${(p*100).toFixed(1)}%"></div></div>`;
@@ -195,28 +202,31 @@ function renderPrediction(probs){
   els.predOut.innerHTML = html;
 }
 
-/* ================== BUTTON HANDLERS ================== */
+// ================== BUTTON HANDLERS ==================
 
 els.btnLoad.onclick = async () => {
   try{
     if (!els.trainFile.files[0]){ log('Select train.txt'); return; }
 
+    // 1) Read files
     state.train = await readTxtFile(els.trainFile.files[0]);
     state.val   = els.valFile.files[0]  ? await readTxtFile(els.valFile.files[0])  : null;
     state.test  = els.testFile.files[0] ? await readTxtFile(els.testFile.files[0]) : null;
 
+    // 2) Infer labels from train and filter all splits to those labels
+    const nLabs = inferLabelsFromTrain(state.train);
+    if (nLabs < 2){ log('ERROR: could not infer labels from training data.'); return; }
+    const keep = it => label2id[it.label] !== undefined;
+    state.train = state.train.filter(keep);
+    if (state.val)  state.val  = state.val.filter(keep);
+    if (state.test) state.test = state.test.filter(keep);
+
+    // 3) Tokenizer (train only)
     state.vocabSize = parseInt(els.vocabSize.value,10) || 10000;
     state.maxLen    = parseInt(els.maxLen.value,10) || 30;
-
-    // If no rows parsed, explain & stop
-    if (state.train.length === 0){
-      els.dataStatus.textContent = `Loaded: train=0, val=${state.val?state.val.length:0}, test=${state.test?state.test.length:0}`;
-      log('ERROR: 0 training rows parsed. Ensure each line is "text<TAB>label" and labels are one of: ' + EMOTIONS.join(', '));
-      return;
-    }
-
     state.tokenizer = buildTokenizer(state.train.map(d=>d.text), state.vocabSize);
 
+    // 4) Tensors
     state.trainT = toXY(state.train, state.tokenizer, state.maxLen);
     state.valT   = state.val  ? toXY(state.val,  state.tokenizer, state.maxLen) : null;
     state.testT  = state.test ? toXY(state.test, state.tokenizer, state.maxLen) : null;
@@ -225,8 +235,9 @@ els.btnLoad.onclick = async () => {
       `Loaded: train=${state.train.length}` +
       (state.val?`, val=${state.val.length}`:'') +
       (state.test?`, test=${state.test.length}`:'') +
-      ` • vocab=${state.vocabSize} • maxLen=${state.maxLen}`;
+      ` • labels=${LABELS.join(', ')} • vocab=${state.vocabSize} • maxLen=${state.maxLen}`;
 
+    log(`Labels inferred: [${LABELS.join(', ')}]`);
     log(`Data loaded and tokenized. First: "${state.train[0].text}" → ${state.train[0].label}`);
   }catch(err){ log('ERROR loading: '+err.message); console.error(err); }
 };
@@ -234,16 +245,15 @@ els.btnLoad.onclick = async () => {
 els.btnTrain.onclick = async () => {
   try{
     if (!state.trainT || state.train.length === 0){
-      return log('Cannot train: 0 training samples. Fix dataset parsing first.');
+      return log('Cannot train: 0 training samples. Fix dataset first.');
     }
     if (state.model){ state.model.dispose(); state.model = null; }
 
-    const epochs = parseInt(els.epochs.value,10) || 10;
+    const epochs = parseInt(els.epochs.value,10) || 8;
     const batch  = parseInt(els.batch.value,10)  || 64;
 
-    state.model = buildModel(state.vocabSize, state.maxLen, EMOTIONS.length);
+    state.model = buildModel(state.vocabSize, state.maxLen, LABELS.length);
 
-    // Use 'accuracy' keys (newer TFJS)
     const callbacks = tfvis.show.fitCallbacks(
       { name: 'Training', tab: 'Charts' },
       ['loss','val_loss','accuracy','val_accuracy'],
@@ -304,7 +314,7 @@ els.btnSaveTok.onclick = () => {
   if (!state.tokenizer) return log('No tokenizer to save.');
   const blob = new Blob([JSON.stringify({
     wordIndex: state.tokenizer.wordIndex,
-    maxLen: state.maxLen, vocabSize: state.vocabSize
+    maxLen: state.maxLen, vocabSize: state.vocabSize, labels: LABELS
   }, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -319,14 +329,21 @@ els.btnLoadModel.onclick = async () => {
     const jf = els.modelJson.files[0], wf = els.modelWeights.files[0], tfj = els.tokJson.files[0];
     if (!jf || !wf || !tfj) return log('Pick model.json, weights.bin, and tokenizer.json');
 
-    // load model
     if (state.model) state.model.dispose();
     state.model = await tf.loadLayersModel(tf.io.browserFiles([jf,wf]));
 
-    // load tokenizer
     const tok = JSON.parse(await tfj.text());
-    state.maxLen = tok.maxLen || state.maxLen;
+    state.maxLen   = tok.maxLen || state.maxLen;
     state.vocabSize = tok.vocabSize || state.vocabSize;
+
+    // Restore labels from tokenizer.json (if present)
+    if (Array.isArray(tok.labels) && tok.labels.length > 1){
+      LABELS = tok.labels.slice();
+      label2id = Object.create(null);
+      LABELS.forEach((lab,i)=>label2id[lab]=i);
+      log(`Labels restored: [${LABELS.join(', ')}]`);
+    }
+
     state.tokenizer = {
       wordIndex: tok.wordIndex || {},
       toSeq(text, maxLen=state.maxLen){
@@ -348,6 +365,8 @@ els.btnReset.onclick = () => {
     if (state.model){ state.model.dispose(); state.model = null; }
     ['train','val','test','trainT','valT','testT'].forEach(k => state[k]=null);
     state.tokenizer = null;
+    LABELS = []; label2id = Object.create(null);
+
     els.logs.textContent = '';
     els.results.innerHTML = '';
     els.predOut.innerHTML = '';
