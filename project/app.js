@@ -129,8 +129,8 @@ function toXY(items, tokenizer, maxLen){
     y[i] = EMOTIONS.indexOf(items[i].label);
   }
   // ⬇ change dtype to float32 here
-  const xs = tf.tensor2d(X, [items.length, maxLen], 'int32');
-  const ys = tf.tensor1d(y, 'int32');
+  const xs = tf.tensor2d(X, [items.length, maxLen], 'float32');
+  const ys = tf.tensor1d(y, 'float32');
   return { xs, ys };
 }
 
