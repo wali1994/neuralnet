@@ -43,20 +43,42 @@ function tokenizeBasic(s){
   return s.toLowerCase().replace(/[^\w\s’']/g,' ').split(/\s+/).filter(Boolean);
 }
 
+// --- REPLACE the whole readTxtFile in app.js with this ---
 async function readTxtFile(file){
   const txt = await file.text();
-  const lines = txt.split(/\r?\n/).filter(Boolean);
+
+  // Split into non-empty lines; strip UTF-8 BOM if present
+  const lines = txt.split(/\r?\n/).map(l => l.replace(/^\uFEFF/, '')).filter(l => l.trim().length);
+
   const data = [];
-  for (const line of lines){
-    const parts = line.split('\t');
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+
+    // Try tab, comma, semicolon, or 2+ spaces as delimiter
+    let parts = raw.split(/\t|,|;|\s{2,}/);
+    // If that still returns just 1 part, fall back to "split on last tab/space"
+    if (parts.length < 2) {
+      const m = raw.match(/^(.*?)[\t ]+([^\t ]+)$/);
+      if (m) parts = [m[1], m[2]];
+    }
     if (parts.length < 2) continue;
-    const text = parts[0].trim();
-    const label = parts[1].trim();
-    if (!text) continue;
-    data.push({text, label});
+
+    // Some files have headers like "text<TAB>label"
+    const first = parts[0].trim().toLowerCase();
+    const last  = parts[parts.length - 1].trim().toLowerCase();
+    if (i === 0 && (first === 'text' || first === 'sentence') && last === 'label') continue;
+
+    // Assume label is the last field, the rest joined as text
+    const label = last;
+    const text  = parts.slice(0, parts.length - 1).join(' ').trim();
+
+    // Keep only known labels; skip junk lines
+    if (!text || !EMOTIONS.includes(label)) continue;
+    data.push({ text, label });
   }
   return data;
 }
+
 
 function buildTokenizer(samples, vocabSize){
   const freq = new Map();
