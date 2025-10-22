@@ -1,132 +1,81 @@
-// ========================================
-// Emotion Recognition (TF.js) - COMPLETE app.js
-// CNN + MLP with dataset-derived labels
-// ========================================
+// app.js — Emotion Recognition with CNN + MLP
 
-// Labels will be inferred from train.txt at load time.
-let LABELS = [];                          // e.g., ["sadness","joy","love","anger","fear","surprise"]
-let label2id = Object.create(null);       // { label -> index }
-
-// Global app state
-const state = {
-  train: null, val: null, test: null,     // raw items [{text,label}]
-  trainT: null, valT: null, testT: null,  // tensors
-  tokenizer: null, model: null,
-  maxLen: 30, vocabSize: 10000,
-};
-
-// UI elements
 const els = {
   trainFile: document.getElementById('trainFile'),
   valFile: document.getElementById('valFile'),
   testFile: document.getElementById('testFile'),
   btnLoad: document.getElementById('btnLoad'),
-  dataStatus: document.getElementById('dataStatus'),
-
-  epochs: document.getElementById('epochs'),
-  batch: document.getElementById('batch'),
-  vocabSize: document.getElementById('vocabSize'),
-  maxLen: document.getElementById('maxLen'),
   btnTrain: document.getElementById('btnTrain'),
   btnEval: document.getElementById('btnEval'),
-  btnReset: document.getElementById('btnReset'),
-
-  btnSaveModel: document.getElementById('btnSaveModel'),
-  btnSaveTok: document.getElementById('btnSaveTok'),
-  modelJson: document.getElementById('modelJson'),
-  modelWeights: document.getElementById('modelWeights'),
-  tokJson: document.getElementById('tokJson'),
-  btnLoadModel: document.getElementById('btnLoadModel'),
-
-  predictText: document.getElementById('predictText'),
-  btnPredict: document.getElementById('btnPredict'),
-
-  logs: document.getElementById('logs'),
-  results: document.getElementById('results'),
-  predOut: document.getElementById('predOut'),
+  log: document.getElementById('log'),
+  chart: document.getElementById('chart'),
+  dataStatus: document.getElementById('dataStatus'),
+  vocabSize: document.getElementById('vocabSize'),
+  maxLen: document.getElementById('maxLen')
 };
 
-// ---------- utils ----------
+let LABELS = [];
+let label2id = {};
+const state = {
+  train: null, val: null, test: null,
+  trainT: null, valT: null, testT: null,
+  tokenizer: null, model: null,
+  maxLen: 30, vocabSize: 10000
+};
+
+// Logging helper
 function log(msg){
-  els.logs.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-  els.logs.scrollTop = els.logs.scrollHeight;
+  console.log(msg);
+  els.log.value += msg + "\n";
+  els.log.scrollTop = els.log.scrollHeight;
 }
 
-function tokenizeBasic(s){
-  // lower, keep word chars+spaces; remove punctuation
-  return s.toLowerCase().replace(/[^\w\s’']/g,' ').split(/\s+/).filter(Boolean);
-}
-
-// Robust .txt reader (tab/comma/semicolon/multi-space; header/BOM-safe)
+// Read TXT file (text;label)
 async function readTxtFile(file){
-  const txt = await file.text();
-  const lines = txt.split(/\r?\n/).map(l => l.replace(/^\uFEFF/, '')).filter(l => l.trim().length);
-
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
   const items = [];
-  for (let i=0;i<lines.length;i++){
-    const raw = lines[i];
-
-    // Try common delimiters first
-    let parts = raw.split(/\t|,|;|\s{2,}/);
-    if (parts.length < 2){
-      // fallback: split on last whitespace chunk
-      const m = raw.match(/^(.*?)[\t ]+([^\t ]+)$/);
-      if (m) parts = [m[1], m[2]];
-    }
-    if (parts.length < 2) continue;
-
-    const first = parts[0].trim().toLowerCase();
-    const last  = parts[parts.length-1].trim().toLowerCase();
-
-    // Skip possible header
-    if (i === 0 && (first === 'text' || first === 'sentence') && last === 'label') continue;
-
-    const label = last;
-    const text  = parts.slice(0, parts.length-1).join(' ').trim();
-
-    if (!text) continue;         // accept any label for now; we filter after inferring LABELS
-    items.push({ text, label });
+  for (const line of lines){
+    const [textPart, label] = line.split(';');
+    if (!textPart || !label) continue;
+    items.push({ text: textPart.trim().toLowerCase(), label: label.trim().toLowerCase() });
   }
   return items;
 }
 
-// Build a simple frequency-based tokenizer
-function buildTokenizer(samples, vocabSize){
+// Tokenizer
+function buildTokenizer(texts, vocabSize){
   const freq = new Map();
-  for (const s of samples){
-    for (const t of tokenizeBasic(s)){
-      freq.set(t, (freq.get(t)||0) + 1);
+  for (const t of texts){
+    for (const w of t.split(/\s+/)){
+      freq.set(w, (freq.get(w) || 0) + 1);
     }
   }
-  const sorted = [...freq.entries()].sort((a,b)=>b[1]-a[1]).slice(0, vocabSize-2);
-  const wordIndex = Object.create(null); // 0=PAD, 1=OOV
-  let idx = 2;
-  for (const [w] of sorted){ wordIndex[w] = idx++; }
-
+  const sorted = Array.from(freq.entries()).sort((a,b)=>b[1]-a[1]).slice(0,vocabSize-2);
+  const word2idx = Object.create(null);
+  word2idx['<PAD>'] = 0; word2idx['<UNK>'] = 1;
+  sorted.forEach(([w],i)=>{ word2idx[w] = i+2; });
   return {
-    wordIndex,
+    word2idx,
     toSeq(text, maxLen){
-      const toks = tokenizeBasic(text);
-      const arr = new Array(maxLen).fill(0);
-      for (let i=0;i<Math.min(toks.length,maxLen);i++){
-        arr[i] = wordIndex[toks[i]] || 1; // OOV -> 1
-      }
-      return arr;
+      const seq = text.split(/\s+/).map(w => word2idx[w] || 1);
+      if (seq.length > maxLen) return seq.slice(0, maxLen);
+      while (seq.length < maxLen) seq.push(0);
+      return seq;
     }
   };
 }
 
-// Infer label set/order from training split
-function inferLabelsFromTrain(trainItems){
-  const set = new Set();
-  for (const it of trainItems) set.add(it.label);
-  LABELS = Array.from(set).sort(); // stable order (alphabetical)
-  label2id = Object.create(null);
-  LABELS.forEach((lab, i) => label2id[lab] = i);
-  return LABELS.length;
+// Infer labels dynamically
+function inferLabelsFromTrain(train){
+  const set = new Set(train.map(d => d.label));
+  LABELS = Array.from(set).sort();
+  label2id = {};
+  LABELS.forEach((l,i)=>label2id[l] = i);
+  log(`Labels inferred: ${LABELS.join(', ')}`);
 }
 
-// Convert items to tensors (xs=int32 indices for embedding; ys=int32 class ids)
+// Convert to tensors
 function toXY(items, tokenizer, maxLen){
   const X = new Int32Array(items.length * maxLen);
   const y = new Int32Array(items.length);
@@ -135,40 +84,23 @@ function toXY(items, tokenizer, maxLen){
     X.set(seq, i*maxLen);
     y[i] = label2id[items[i].label];
   }
-  const xs = tf.tensor2d(X, [items.length, maxLen], 'int32'); // embedding likes int32
+  const xs = tf.tensor2d(X, [items.length, maxLen], 'int32');
   const ys = tf.tensor1d(y, 'int32');
   return { xs, ys };
 }
 
-// ---------- Model (CNN + MLP; dropout removed for dtype stability) ----------
+// Model: CNN + MLP (no dropout)
 function buildModel(vocabSize, maxLen, numClasses){
   const input = tf.input({shape:[maxLen]});
+  let x = tf.layers.embedding({inputDim:vocabSize, outputDim:128, inputLength:maxLen}).apply(input);
 
-  // Embedding -> float32
-  let x = tf.layers.embedding({
-    inputDim: vocabSize,
-    outputDim: 128,
-    inputLength: maxLen
-  }).apply(input); // [B, L, 128]
-
-  // Multi-kernel conv + global max pool
   const convs = [3,4,5].map(k => {
-    const c = tf.layers.conv1d({
-      filters: 128,
-      kernelSize: k,
-      activation: 'relu',
-      padding: 'valid'
-    }).apply(x);
-    return tf.layers.globalMaxPooling1d().apply(c); // [B, 128]
+    const c = tf.layers.conv1d({filters:128, kernelSize:k, activation:'relu'}).apply(x);
+    return tf.layers.globalMaxPooling1d().apply(c);
   });
-
-  // Concatenate conv channels
-  let feat = tf.layers.concatenate().apply(convs); // [B, 384]
-
-  // MLP head
+  let feat = tf.layers.concatenate().apply(convs);
   feat = tf.layers.dense({units:128, activation:'relu'}).apply(feat);
   feat = tf.layers.dense({units:64, activation:'relu'}).apply(feat);
-
   const out = tf.layers.dense({units:numClasses, activation:'softmax'}).apply(feat);
 
   const model = tf.model({inputs: input, outputs: out});
@@ -180,198 +112,75 @@ function buildModel(vocabSize, maxLen, numClasses){
   return model;
 }
 
-// ---------- Render helpers ----------
-function showConfusionMatrix(yTrue, yPred){
-  const K = LABELS.length;
-  const M = Array.from({length:K}, ()=>Array(K).fill(0));
-  for (let i=0;i<yTrue.length;i++) M[yTrue[i]][yPred[i]]++;
-  let html = `<table class="cm"><tr><th></th>${LABELS.map(e=>`<th>${e}</th>`).join('')}</tr>`;
-  for (let r=0;r<K;r++){ html += `<tr><th>${LABELS[r]}</th>${M[r].map(n=>`<td>${n}</td>`).join('')}</tr>`; }
-  html += `</table>`;
-  els.results.innerHTML = html;
-}
-
-function renderPrediction(probs){
-  const arr = Array.from(probs);
-  const pairs = LABELS.map((e,i)=>({emo:e,p:arr[i]})).sort((a,b)=>b.p-a.p);
-  let html = `<div class="bars">`;
-  for (const {emo,p} of pairs){
-    html += `<div>${emo}</div><div class="bar"><div class="fill" style="width:${(p*100).toFixed(1)}%"></div></div>`;
-  }
-  html += `</div><div class="top">Top: <b>${pairs[0].emo}</b> (${(pairs[0].p*100).toFixed(1)}%)</div>`;
-  els.predOut.innerHTML = html;
-}
-
-// ================== BUTTON HANDLERS ==================
-
+// Load data
 els.btnLoad.onclick = async () => {
   try{
     if (!els.trainFile.files[0]){ log('Select train.txt'); return; }
 
-    // 1) Read files
     state.train = await readTxtFile(els.trainFile.files[0]);
-    state.val   = els.valFile.files[0]  ? await readTxtFile(els.valFile.files[0])  : null;
-    state.test  = els.testFile.files[0] ? await readTxtFile(els.testFile.files[0]) : null;
+    state.val = els.valFile.files[0] ? await readTxtFile(els.valFile.files[0]) : [];
+    state.test = els.testFile.files[0] ? await readTxtFile(els.testFile.files[0]) : [];
 
-    // 2) Infer labels from train and filter all splits to those labels
-    const nLabs = inferLabelsFromTrain(state.train);
-    if (nLabs < 2){ log('ERROR: could not infer labels from training data.'); return; }
+    inferLabelsFromTrain(state.train);
+
     const keep = it => label2id[it.label] !== undefined;
     state.train = state.train.filter(keep);
-    if (state.val)  state.val  = state.val.filter(keep);
-    if (state.test) state.test = state.test.filter(keep);
+    state.val = state.val.filter(keep);
+    state.test = state.test.filter(keep);
 
-    // 3) Tokenizer (train only)
     state.vocabSize = parseInt(els.vocabSize.value,10) || 10000;
-    state.maxLen    = parseInt(els.maxLen.value,10) || 30;
-    state.tokenizer = buildTokenizer(state.train.map(d=>d.text), state.vocabSize);
+    state.maxLen = parseInt(els.maxLen.value,10) || 30;
 
-    // 4) Tensors
+    state.tokenizer = buildTokenizer(state.train.map(d=>d.text), state.vocabSize);
     state.trainT = toXY(state.train, state.tokenizer, state.maxLen);
-    state.valT   = state.val  ? toXY(state.val,  state.tokenizer, state.maxLen) : null;
-    state.testT  = state.test ? toXY(state.test, state.tokenizer, state.maxLen) : null;
+    state.valT = state.val.length ? toXY(state.val, state.tokenizer, state.maxLen) : null;
+    state.testT = state.test.length ? toXY(state.test, state.tokenizer, state.maxLen) : null;
 
     els.dataStatus.textContent =
-      `Loaded: train=${state.train.length}` +
-      (state.val?`, val=${state.val.length}`:'') +
-      (state.test?`, test=${state.test.length}`:'') +
-      ` • labels=${LABELS.join(', ')} • vocab=${state.vocabSize} • maxLen=${state.maxLen}`;
-
-    log(`Labels inferred: [${LABELS.join(', ')}]`);
-    log(`Data loaded and tokenized. First: "${state.train[0].text}" → ${state.train[0].label}`);
+      `Loaded: train=${state.train.length}, val=${state.val.length}, test=${state.test.length}, labels=${LABELS.join(', ')}`;
+    log('Data loaded and tokenized successfully.');
   }catch(err){ log('ERROR loading: '+err.message); console.error(err); }
 };
 
+// Train model
 els.btnTrain.onclick = async () => {
   try{
-    if (!state.trainT || state.train.length === 0){
-      return log('Cannot train: 0 training samples. Fix dataset first.');
-    }
-    if (state.model){ state.model.dispose(); state.model = null; }
-
-    const epochs = parseInt(els.epochs.value,10) || 8;
-    const batch  = parseInt(els.batch.value,10)  || 64;
-
-    state.model = buildModel(state.vocabSize, state.maxLen, LABELS.length);
+    if (!state.trainT) return log('Load data first!');
+    const numClasses = LABELS.length;
+    state.model = buildModel(state.vocabSize, state.maxLen, numClasses);
+    log(state.model.summary());
 
     const callbacks = tfvis.show.fitCallbacks(
-      { name: 'Training', tab: 'Charts' },
+      { name: 'Training Progress', tab: 'Charts' },
       ['loss','val_loss','accuracy','val_accuracy'],
       { callbacks: ['onEpochEnd'] }
     );
 
-    log(`Training… epochs=${epochs}, batch=${batch}`);
     await state.model.fit(state.trainT.xs, state.trainT.ys, {
-      epochs, batchSize: batch,
+      epochs: 8,
+      batchSize: 32,
       validationData: state.valT ? [state.valT.xs, state.valT.ys] : null,
-      shuffle: true,
       callbacks
     });
+
     log('Training complete.');
-  }catch(err){ log('ERROR training: '+err.message); console.error(err); }
+  }catch(err){ log('Training error: '+err.message); console.error(err); }
 };
 
+// Evaluate model
 els.btnEval.onclick = async () => {
   try{
-    if (!state.model) return log('Train or load a model first.');
-    const set = state.testT || state.valT || state.trainT;
-    if (!set) return log('No dataset tensors available.');
+    if (!state.model || !state.testT) return log('Need model and test set.');
+    const preds = state.model.predict(state.testT.xs);
+    const yPred = preds.argMax(-1);
+    const yTrue = state.testT.ys;
+    const acc = (await tf.equal(yPred, yTrue).sum().array()) / yTrue.shape[0];
+    log(`Test accuracy: ${(acc*100).toFixed(2)}%`);
 
-    const probs = state.model.predict(set.xs);
-    const yhat  = probs.argMax(-1);
-    const ypred = Array.from(await yhat.data());
-    const ytrue = Array.from(await set.ys.data());
-    const acc = ypred.filter((p,i)=>p===ytrue[i]).length / ytrue.length;
-
-    log(`Eval accuracy: ${(acc*100).toFixed(2)}% on ${ytrue.length} samples.`);
-    showConfusionMatrix(ytrue, ypred);
-
-    probs.dispose(); yhat.dispose();
-  }catch(err){ log('ERROR eval: '+err.message); console.error(err); }
-};
-
-els.btnPredict.onclick = () => {
-  try{
-    const txt = els.predictText.value.trim();
-    if (!txt) return;
-    if (!state.model || !state.tokenizer) return log('Load/train model first.');
-
-    const seq = state.tokenizer.toSeq(txt, state.maxLen);
-    const xs  = tf.tensor2d([seq], [1,state.maxLen], 'int32');
-    const p   = state.model.predict(xs);
-    p.data().then(arr => renderPrediction(arr));
-    p.dispose(); xs.dispose();
-  }catch(err){ log('ERROR predict: '+err.message); console.error(err); }
-};
-
-els.btnSaveModel.onclick = async () => {
-  if (!state.model) return log('No model to save.');
-  await state.model.save('downloads://emotion_mlp');
-  log('Model saved (downloaded).');
-};
-
-els.btnSaveTok.onclick = () => {
-  if (!state.tokenizer) return log('No tokenizer to save.');
-  const blob = new Blob([JSON.stringify({
-    wordIndex: state.tokenizer.wordIndex,
-    maxLen: state.maxLen, vocabSize: state.vocabSize, labels: LABELS
-  }, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'tokenizer.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  log('Tokenizer saved.');
-};
-
-els.btnLoadModel.onclick = async () => {
-  try{
-    const jf = els.modelJson.files[0], wf = els.modelWeights.files[0], tfj = els.tokJson.files[0];
-    if (!jf || !wf || !tfj) return log('Pick model.json, weights.bin, and tokenizer.json');
-
-    if (state.model) state.model.dispose();
-    state.model = await tf.loadLayersModel(tf.io.browserFiles([jf,wf]));
-
-    const tok = JSON.parse(await tfj.text());
-    state.maxLen   = tok.maxLen || state.maxLen;
-    state.vocabSize = tok.vocabSize || state.vocabSize;
-
-    // Restore labels from tokenizer.json (if present)
-    if (Array.isArray(tok.labels) && tok.labels.length > 1){
-      LABELS = tok.labels.slice();
-      label2id = Object.create(null);
-      LABELS.forEach((lab,i)=>label2id[lab]=i);
-      log(`Labels restored: [${LABELS.join(', ')}]`);
-    }
-
-    state.tokenizer = {
-      wordIndex: tok.wordIndex || {},
-      toSeq(text, maxLen=state.maxLen){
-        const toks = tokenizeBasic(text);
-        const arr = new Array(maxLen).fill(0);
-        for (let i=0;i<Math.min(toks.length,maxLen);i++){
-          const id = this.wordIndex[toks[i]] || 1;
-          arr[i] = id;
-        }
-        return arr;
-      }
-    };
-    log('Model + tokenizer loaded.');
-  }catch(err){ log('ERROR loading model: '+err.message); console.error(err); }
-};
-
-els.btnReset.onclick = () => {
-  try{
-    if (state.model){ state.model.dispose(); state.model = null; }
-    ['train','val','test','trainT','valT','testT'].forEach(k => state[k]=null);
-    state.tokenizer = null;
-    LABELS = []; label2id = Object.create(null);
-
-    els.logs.textContent = '';
-    els.results.innerHTML = '';
-    els.predOut.innerHTML = '';
-    els.dataStatus.textContent = 'No data loaded';
-    tfvis.visor().close();
-    log('Reset done.');
-  }catch(e){ log('ERROR reset: '+e.message); }
+    const sampleIdx = tf.util.createShuffledIndices(Math.min(5, state.test.length));
+    const predArr = await yPred.array();
+    sampleIdx.forEach(i=>{
+      log(`Text: ${state.test[i].text}\nTrue: ${state.test[i].label}\nPred: ${LABELS[predArr[i]]}\n`);
+    });
+  }catch(err){ log('Eval error: '+err.message); console.error(err); }
 };
