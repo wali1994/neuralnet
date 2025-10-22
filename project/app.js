@@ -128,10 +128,12 @@ function toXY(items, tokenizer, maxLen){
     X.set(seq, i*maxLen);
     y[i] = EMOTIONS.indexOf(items[i].label);
   }
-  const xs = tf.tensor2d(X, [items.length, maxLen], 'int32');
+  // ⬇ change dtype to float32 here
+  const xs = tf.tensor2d(X, [items.length, maxLen], 'float32');
   const ys = tf.tensor1d(y, 'int32');
   return { xs, ys };
 }
+
 
 /* --- CNN + MLP Hybrid model --- */
 function buildModel(vocabSize, maxLen, numClasses){
