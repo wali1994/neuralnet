@@ -97,15 +97,41 @@ function toXY(items, tokenizer, maxLen){
   return { xs, ys };
 }
 
+// CNN + MLP Hybrid for Emotion Recognition
 function buildModel(vocabSize, maxLen, numClasses){
   const input = tf.input({shape:[maxLen]});
-  let x = tf.layers.embedding({inputDim:vocabSize, outputDim:128, inputLength:maxLen}).apply(input);
-  x = tf.layers.globalAveragePooling1d().apply(x);
-  x = tf.layers.dense({units:128, activation:'relu'}).apply(x);
-  x = tf.layers.dropout({rate:0.3}).apply(x);
-  x = tf.layers.dense({units:64, activation:'relu'}).apply(x);
-  const out = tf.layers.dense({units:numClasses, activation:'softmax'}).apply(x);
-  const model = tf.model({inputs:input, outputs:out});
+
+  // 1️⃣ Embedding layer
+  let x = tf.layers.embedding({
+    inputDim: vocabSize,
+    outputDim: 128,
+    inputLength: maxLen
+  }).apply(input);
+
+  // 2️⃣ Convolutional feature extractor (multi-kernel)
+  const convs = [3,4,5].map(k => {
+    const c = tf.layers.conv1d({
+      filters: 128,           // can use 64 for lighter model
+      kernelSize: k,
+      activation: 'relu',
+      padding: 'valid'
+    }).apply(x);
+    return tf.layers.globalMaxPooling1d().apply(c);
+  });
+
+  // 3️⃣ Concatenate + Dropout
+  let feat = tf.layers.concatenate().apply(convs);
+  feat = tf.layers.dropout({rate:0.5}).apply(feat);
+
+  // 4️⃣ MLP classifier head
+  feat = tf.layers.dense({units:128, activation:'relu'}).apply(feat);
+  feat = tf.layers.dropout({rate:0.3}).apply(feat);
+  feat = tf.layers.dense({units:64, activation:'relu'}).apply(feat);
+
+  // 5️⃣ Output
+  const out = tf.layers.dense({units:numClasses, activation:'softmax'}).apply(feat);
+
+  const model = tf.model({inputs: input, outputs: out});
   model.compile({
     optimizer: tf.train.adam(0.001),
     loss: 'sparseCategoricalCrossentropy',
@@ -113,6 +139,7 @@ function buildModel(vocabSize, maxLen, numClasses){
   });
   return model;
 }
+
 
 function showConfusionMatrix(yTrue, yPred){
   const K = EMOTIONS.length;
