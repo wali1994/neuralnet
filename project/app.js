@@ -319,4 +319,30 @@ els.btnReset.onclick = () => {
     log('Reset done.');
   }catch(e){ log('ERROR reset: '+e.message); }
 };
+els.btnLoad.onclick = async () => {
+  try{
+    if (!els.trainFile.files[0]){ log('Select train.txt'); return; }
+    state.train = await readTxtFile(els.trainFile.files[0]);
+    if (els.valFile.files[0])  state.val  = await readTxtFile(els.valFile.files[0]);
+    if (els.testFile.files[0]) state.test = await readTxtFile(els.testFile.files[0]);
+
+    state.vocabSize = parseInt(els.vocabSize.value,10);
+    state.maxLen = parseInt(els.maxLen.value,10);
+    state.tokenizer = buildTokenizer(state.train.map(d=>d.text), state.vocabSize);
+
+    const tr = toXY(state.train, state.tokenizer, state.maxLen);
+    const va = state.val  ? toXY(state.val,  state.tokenizer, state.maxLen) : null;
+    const te = state.test ? toXY(state.test, state.tokenizer, state.maxLen) : null;
+    state.trainT = tr; state.valT = va; state.testT = te;
+
+    els.dataStatus.textContent =
+      `Loaded: train=${state.train.length}${state.val?`, val=${state.val.length}`:''}${state.test?`, test=${state.test.length}`:''} • vocab=${state.vocabSize} • maxLen=${state.maxLen}`;
+
+    if (state.train.length === 0) {
+      log('ERROR: 0 training rows parsed. Check delimiter: must be text<TAB>label (or comma/semicolon/multi-space).');
+    } else {
+      log(`Data loaded and tokenized. First sample: "${state.train[0].text}" → ${state.train[0].label}`);
+    }
+  }catch(err){ log('ERROR loading: '+err.message); console.error(err); }
+};
 
