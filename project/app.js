@@ -136,43 +136,14 @@ function toXY(items, tokenizer, maxLen){
 
 
 /* --- CNN + MLP Hybrid model --- */
-function buildModel(vocabSize, maxLen, numClasses){
-  const input = tf.input({shape:[maxLen]});
+// right before the first dropout:
+feat = tf.layers.dense({units: feat.shape[feat.shape.length-1], useBias:false, activation:'linear'}).apply(feat);
+feat = tf.layers.dropout({rate:0.5}).apply(feat);
 
-  // Embedding
-  let x = tf.layers.embedding({
-    inputDim: vocabSize,
-    outputDim: 128,
-    inputLength: maxLen
-  }).apply(input); // [B, L, 128]
+// ... later before the second dropout:
+feat = tf.layers.dense({units: feat.shape[feat.shape.length-1], useBias:false, activation:'linear'}).apply(feat);
+feat = tf.layers.dropout({rate:0.3}).apply(feat);
 
-  // Multi-kernel Conv1D + GlobalMaxPool
-  const convs = [3,4,5].map(k => {
-    const c = tf.layers.conv1d({
-      filters: 128, kernelSize: k, activation: 'relu', padding: 'valid'
-    }).apply(x);
-    return tf.layers.globalMaxPooling1d().apply(c); // [B, 128]
-  });
-
-  // Concatenate + Dropout
-  let feat = tf.layers.concatenate().apply(convs);  // [B, 384]
-  feat = tf.layers.dropout({rate: 0.5}).apply(feat);
-
-  // MLP classifier head
-  feat = tf.layers.dense({units:128, activation:'relu'}).apply(feat);
-  feat = tf.layers.dropout({rate:0.3}).apply(feat);
-  feat = tf.layers.dense({units:64, activation:'relu'}).apply(feat);
-
-  const out = tf.layers.dense({units:numClasses, activation:'softmax'}).apply(feat);
-
-  const model = tf.model({inputs: input, outputs: out});
-  model.compile({
-    optimizer: tf.train.adam(1e-3),
-    loss: 'sparseCategoricalCrossentropy',
-    metrics: ['accuracy']
-  });
-  return model;
-}
 
 /* --- Confusion matrix renderer --- */
 function showConfusionMatrix(yTrue, yPred){
