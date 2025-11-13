@@ -11,49 +11,7 @@
     <h1>Diabetes Risk Prediction</h1>
 
     <form id="predictForm">
-        <label for="gender">Gender:</label>
-        <select id="gender" required>
-            <option value="" disabled selected>Select gender</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-        </select>
-
-        <label for="age">Age (years):</label>
-        <input type="number" id="age" step="0.1" required>
-
-        <label for="hypertension">Hypertension:</label>
-        <select id="hypertension" required>
-            <option value="0">No</option>
-            <option value="1">Yes</option>
-        </select>
-
-        <label for="heart_disease">Heart disease:</label>
-        <select id="heart_disease" required>
-            <option value="0">No</option>
-            <option value="1">Yes</option>
-        </select>
-
-        <label for="smoking_history">Smoking history:</label>
-        <select id="smoking_history" required>
-            <option value="" disabled selected>Select</option>
-            <option value="never">Never</option>
-            <option value="former">Former</option>
-            <option value="current">Current</option>
-            <option value="not current">Not current</option>
-            <option value="ever">Ever</option>
-            <option value="No Info">No Info</option>
-        </select>
-
-        <label for="bmi">BMI:</label>
-        <input type="number" id="bmi" step="0.1" required>
-
-        <label for="HbA1c_level">HbA1c level:</label>
-        <input type="number" id="HbA1c_level" step="0.1" required>
-
-        <label for="blood_glucose_level">Blood glucose level:</label>
-        <input type="number" id="blood_glucose_level" required>
-
-        <button type="submit">Predict</button>
+        <!-- your form fields here -->
     </form>
 
     <div id="output">
@@ -66,5 +24,3 @@
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
-
-
