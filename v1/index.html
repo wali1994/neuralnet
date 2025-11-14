@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.21.0/dist/tf.min.js"></script>
     <!-- PapaParse for CSV -->
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -27,6 +29,17 @@
 
         <div id="eda"></div>
         <div id="metrics"></div>
+
+        <div class="charts">
+            <div>
+                <h3>Class distribution</h3>
+                <canvas id="classChart" height="180"></canvas>
+            </div>
+            <div>
+                <h3>Feature importance (logistic regression)</h3>
+                <canvas id="importanceChart" height="180"></canvas>
+            </div>
+        </div>
     </section>
 
     <!-- 2. User prediction -->
@@ -103,4 +116,3 @@
 <script src="script.js"></script>
 </body>
 </html>
-
