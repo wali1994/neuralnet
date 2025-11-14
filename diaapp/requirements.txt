@@ -1,7 +1,0 @@
-Flask
-pandas
-numpy
-scikit-learn
-tensorflow
-joblib
-
