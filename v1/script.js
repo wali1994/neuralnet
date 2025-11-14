@@ -1,10 +1,35 @@
-// Global state
+// ===== Global state =====
 let rawRows = [];
-let featureOrder = ["genderNum", "age", "hypertension", "heart_disease", "smokingCode", "bmi", "HbA1c_level", "blood_glucose_level"];
 let scaler = { mean: [], std: [] };
 let logModel = null;
 let nnModel = null;
 let modelsReady = false;
+
+let classStats = null;
+let classChart = null;
+let importanceChart = null;
+
+const featureOrder = [
+    "genderNum",
+    "age",
+    "hypertension",
+    "heart_disease",
+    "smokingCode",
+    "bmi",
+    "HbA1c_level",
+    "blood_glucose_level"
+];
+
+const featureNames = [
+    "Gender (Male=1)",
+    "Age",
+    "Hypertension",
+    "Heart disease",
+    "Smoking history code",
+    "BMI",
+    "HbA1c level",
+    "Blood glucose level"
+];
 
 const smokingMap = {
     "never": 0,
@@ -23,7 +48,7 @@ const predictForm = document.getElementById("predictForm");
 const predictButton = document.getElementById("predictButton");
 const predictionOutput = document.getElementById("predictionOutput");
 
-// 1. Load dataset
+// ===== 1. Load dataset =====
 datasetInput.addEventListener("change", function (e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -36,11 +61,12 @@ datasetInput.addEventListener("change", function (e) {
             rawRows = cleanRows(results.data);
             showEDA(rawRows);
             trainButton.disabled = rawRows.length === 0;
+            metricsDiv.innerHTML = "";
+            destroyCharts();
         }
     });
 });
 
-// Clean and basic preprocessing for rows
 function cleanRows(rows) {
     const cleaned = [];
     for (const r of rows) {
@@ -80,6 +106,7 @@ function cleanRows(rows) {
 function showEDA(rows) {
     if (rows.length === 0) {
         edaDiv.innerHTML = "<p>No valid rows found in dataset.</p>";
+        classStats = null;
         return;
     }
     const n = rows.length;
@@ -97,6 +124,14 @@ function showEDA(rows) {
     const meanAge = (ageSum / n).toFixed(1);
     const meanBmi = (bmiSum / n).toFixed(1);
 
+    classStats = {
+        total: n,
+        positives,
+        negatives: neg,
+        posPct,
+        negPct
+    };
+
     edaDiv.innerHTML = `
         <p><strong>Rows:</strong> ${n}</p>
         <p><strong>Class distribution:</strong> 0 → ${neg} (${negPct}%), 1 → ${positives} (${posPct}%)</p>
@@ -105,7 +140,18 @@ function showEDA(rows) {
     `;
 }
 
-// 2. Train models
+function destroyCharts() {
+    if (classChart) {
+        classChart.destroy();
+        classChart = null;
+    }
+    if (importanceChart) {
+        importanceChart.destroy();
+        importanceChart = null;
+    }
+}
+
+// ===== 2. Train models =====
 trainButton.addEventListener("click", async function () {
     if (rawRows.length === 0) return;
     trainButton.disabled = true;
@@ -115,7 +161,7 @@ trainButton.addEventListener("click", async function () {
         const { XTrain, yTrain, XTest, yTest } = prepareTensors(rawRows);
         const inputDim = featureOrder.length;
 
-        // Logistic regression (no hidden layer)
+        // Logistic regression (1-layer NN)
         logModel = tf.sequential();
         logModel.add(tf.layers.dense({
             units: 1,
@@ -139,7 +185,7 @@ trainButton.addEventListener("click", async function () {
         const logLoss = (await logEval[0].data())[0];
         const logAcc = (await logEval[1].data())[0];
 
-        // Neural network with hidden layer
+        // Neural network with hidden layers
         nnModel = tf.sequential();
         nnModel.add(tf.layers.dense({
             units: 32,
@@ -171,23 +217,42 @@ trainButton.addEventListener("click", async function () {
         const nnLoss = (await nnEval[0].data())[0];
         const nnAcc = (await nnEval[1].data())[0];
 
+        // Get logistic regression weights for feature importance
+        const kernelTensor = logModel.getWeights()[0];
+        const kernel = await kernelTensor.array(); // shape [inputDim, 1]
+        const weights = kernel.map(row => row[0]); // flatten
+
+        // Feature importance for "no diabetes" = negative weights (protective)
+        const pairs = featureNames.map((name, i) => ({ name, weight: weights[i] }));
+        const protective = pairs
+            .filter(p => p.weight < 0)
+            .sort((a, b) => a.weight - b.weight) // most negative first
+            .slice(0, 3);
+
+        const protectiveText = protective.length
+            ? protective.map(p => `${p.name} (weight ${p.weight.toFixed(3)})`).join(", ")
+            : "No clear protective features (all weights ≥ 0).";
+
         metricsDiv.innerHTML = `
             <p><strong>Logistic regression:</strong> accuracy ${(logAcc * 100).toFixed(2)}%, loss ${logLoss.toFixed(4)}</p>
             <p><strong>Neural network:</strong> accuracy ${(nnAcc * 100).toFixed(2)}%, loss ${nnLoss.toFixed(4)}</p>
+            <p><strong>Most important features associated with <u>no diabetes</u> (protective):</strong> ${protectiveText}</p>
+            <p class="hint">Positive weight → increases diabetes risk; negative weight → associated with lower risk.</p>
         `;
 
+        renderCharts(weights);
         modelsReady = true;
         predictButton.disabled = false;
     } catch (err) {
         console.error(err);
-        metricsDiv.innerHTML = "<p>Error while training models. Check console.</p>";
+        metricsDiv.innerHTML = "<p>Error while training models. Open console for details.</p>";
     } finally {
         trainButton.textContent = "Train models";
+        trainButton.disabled = false;
     }
 });
 
 function prepareTensors(rows) {
-    // maybe sample to keep training light
     const maxRows = 5000;
     let data = rows;
     if (rows.length > maxRows) {
@@ -233,7 +298,6 @@ function prepareTensors(rows) {
         }
     }
 
-    // compute scaler on train
     scaler = computeScaler(XTrain);
 
     const XTrainScaled = applyScaler(XTrain, scaler);
@@ -297,7 +361,57 @@ function shuffle(arr) {
     return a;
 }
 
-// 3. User prediction
+// ===== 3. Charts =====
+function renderCharts(weights) {
+    if (classStats) {
+        const ctx1 = document.getElementById("classChart").getContext("2d");
+        if (classChart) classChart.destroy();
+        classChart = new Chart(ctx1, {
+            type: "bar",
+            data: {
+                labels: ["No diabetes (0)", "Diabetes (1)"],
+                datasets: [{
+                    data: [classStats.negatives, classStats.positives]
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    const ctx2 = document.getElementById("importanceChart").getContext("2d");
+    if (importanceChart) importanceChart.destroy();
+    importanceChart = new Chart(ctx2, {
+        type: "bar",
+        data: {
+            labels: featureNames,
+            datasets: [{
+                data: weights
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 60,
+                        minRotation: 30
+                    }
+                },
+                y: {
+                    beginAtZero: false
+                }
+            }
+        }
+    });
+}
+
+// ===== 4. User prediction (fixed for multiple runs) =====
 predictForm.addEventListener("submit", async function (e) {
     e.preventDefault();
     if (!modelsReady || !nnModel) {
@@ -305,42 +419,52 @@ predictForm.addEventListener("submit", async function (e) {
         return;
     }
 
-    const genderVal = document.getElementById("gender").value;
-    const age = parseFloat(document.getElementById("age").value);
-    const hypertension = parseInt(document.getElementById("hypertension").value);
-    const heart = parseInt(document.getElementById("heart_disease").value);
-    const smokingVal = document.getElementById("smoking_history").value;
-    const bmi = parseFloat(document.getElementById("bmi").value);
-    const hba1c = parseFloat(document.getElementById("hba1c").value);
-    const glucose = parseFloat(document.getElementById("glucose").value);
+    try {
+        const genderVal = document.getElementById("gender").value;
+        const age = parseFloat(document.getElementById("age").value);
+        const hypertension = parseInt(document.getElementById("hypertension").value);
+        const heart = parseInt(document.getElementById("heart_disease").value);
+        const smokingVal = document.getElementById("smoking_history").value;
+        const bmi = parseFloat(document.getElementById("bmi").value);
+        const hba1c = parseFloat(document.getElementById("hba1c").value);
+        const glucose = parseFloat(document.getElementById("glucose").value);
 
-    const genderNum = genderVal === "Male" ? 1 : 0;
-    const smokingCode = smokingMap[smokingVal];
+        const genderNum = genderVal === "Male" ? 1 : 0;
+        const smokingCode = smokingMap[smokingVal];
 
-    const feats = [
-        genderNum,
-        age,
-        hypertension,
-        heart,
-        smokingCode,
-        bmi,
-        hba1c,
-        glucose
-    ];
+        const feats = [
+            genderNum,
+            age,
+            hypertension,
+            heart,
+            smokingCode,
+            bmi,
+            hba1c,
+            glucose
+        ];
 
-    const scaled = applyScaler([feats], scaler)[0];
-    const xTensor = tf.tensor2d([scaled]);
-    const prob = (await nnModel.predict(xTensor).data())[0];
-    xTensor.dispose();
+        const scaledRow = applyScaler([feats], scaler)[0];
 
-    const label = prob >= 0.5 ? "Positive" : "Negative";
-    const msg = label === "Positive"
-        ? "You may be at higher risk of diabetes. Please consult a doctor for medical advice."
-        : "Your predicted diabetes risk is low based on this model. This does not replace medical tests.";
+        const xTensor = tf.tensor2d([scaledRow]);
+        const probTensor = nnModel.predict(xTensor);
+        const probArr = await probTensor.data();
+        const prob = probArr[0];
 
-    predictionOutput.innerHTML = `
-        <p><strong>Prediction:</strong> Diabetes risk ${label}</p>
-        <p><strong>Probability:</strong> ${(prob * 100).toFixed(2)}%</p>
-        <p>${msg}</p>
-    `;
+        xTensor.dispose();
+        probTensor.dispose();
+
+        const label = prob >= 0.5 ? "Positive" : "Negative";
+        const msg = label === "Positive"
+            ? "You may be at higher risk of diabetes. Please consult a doctor for medical advice."
+            : "Your predicted diabetes risk is low based on this model. This does not replace medical tests.";
+
+        predictionOutput.innerHTML = `
+            <p><strong>Prediction:</strong> Diabetes risk ${label}</p>
+            <p><strong>Probability:</strong> ${(prob * 100).toFixed(2)}%</p>
+            <p>${msg}</p>
+        `;
+    } catch (err) {
+        console.error(err);
+        predictionOutput.innerHTML = "<p>Error while predicting. Check console.</p>";
+    }
 });
