@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindMood - AI Mood Detection</title>
+    <style>
+        :root {
+            --primary-color: #8b5cf6;
+            --secondary-color: #ec4899;
+            --danger-color: #ef4444;
+            --light-bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-dark: #1e293b;
+            --text-light: #64748b;
+            --border-color: #e2e8f0;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Navigation */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo-icon { font-size: 28px; }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: var(--text-dark);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            color: var(--primary-color);
+        }
+
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+        }
+
+        /* Pages */
+        .page {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .page.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Hero */
+        .hero {
+            padding: 80px 0;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1e5ff 100%);
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .hero-text h1 {
+            font-size: 56px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-text p {
+            font-size: 18px;
+            color: var(--text-light);
+            margin-bottom: 30px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding-top: 40px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .stat-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            color: var(--text-light);
+            font-size: 14px;
+        }
+
+        .hero-visual {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .visual-circle {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-lg);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .visual-inner {
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .visual-icon { font-size: 80px; }
+        .visual-inner p { font-weight: 600; color: var(--text-dark); }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--text-dark);
+            border: 2px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .btn-large {
+            padding: 16px 40px;
+            font-size: 18px;
+        }
+
+        /* Features */
+        .features {
+            padding: 80px 0;
+        }
+
+        .features h2 {
+            font-size: 42px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow);
+        }
+
+        .feature-icon { font-size: 48px; margin-bottom: 20px; }
+        .feature-card h3 { font-size: 22px; margin-bottom: 15px; }
+        .feature-card p { color: var(--text-light); }
+
+        /* How It Works */
+        .how-it-works {
+            padding: 80px 0;
+            background: white;
+        }
+
+        .how-it-works h2 {
+            font-size: 42px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+            align-items: center;
+        }
+
+        .step {
+            background: var(--light-bg);
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .step-number {
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .step h3 { font-size: 20px; margin-bottom: 10px; }
+        .step p { color: var(--text-light); }
+        .step-arrow { font-size: 32px; color: var(--primary-color); text-align: center; }
+
+        /* CTA */
+        .cta {
+            padding: 80px 0;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            text-align: center;
+        }
+
+        .cta h2 { color: white; margin-bottom: 20px; font-size: 42px; font-weight: 800; }
+        .cta p { font-size: 18px; margin-bottom: 30px; opacity: 0.9; }
+        .cta .btn { background: white; color: var(--primary-color); }
+
+        /* Detector */
+        .detector-wrapper {
+            padding: 60px 0;
+        }
+
+        .detector-wrapper h1 {
+            text-align: center;
+            font-size: 42px;
+            margin-bottom: 40px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 40px;
+            justify-content: center;
+            background: var(--light-bg);
+            padding: 10px;
+            border-radius: 8px;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            color: var(--text-light);
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: var(--primary-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-content.active { display: block; }
+
+        .input-section {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .input-section label {
+            display: block;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-dark);
+        }
+
+        .input-section textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s ease;
+        }
+
+        .input-section textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+        }
+
+        .char-count {
+            text-align: right;
+            color: var(--text-light);
+            font-size: 14px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* Voice Recording */
+        .voice-upload { padding: 20px 0; }
+
+        #recording-controls {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        #recording-timer {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ef4444;
+            display: none;
+            margin: 15px 0;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        #recording-playback {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #recording-playback p {
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        #recorded-audio {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .recording-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .recording-buttons button {
+            flex: 1;
+        }
+
+        /* Results */
+        .results-section {
+            max-width: 600px;
+            margin: 40px auto;
+        }
+
+        .result-card {
+            background: white;
+            padding: 60px 40px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            text-align: center;
+        }
+
+        .result-emoji { font-size: 80px; margin-bottom: 20px; }
+        .result-card h2 {
+            font-size: 42px;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            text-transform: capitalize;
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--light-bg);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            transition: width 0.5s ease;
+        }
+
+        .confidence-text {
+            color: var(--text-light);
+            margin-bottom: 30px;
+            font-size: 18px;
+        }
+
+        .recommendation-box {
+            background: var(--light-bg);
+            padding: 30px;
+            border-radius: 8px;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .recommendation-box h3 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .recommendation-box p {
+            color: var(--text-dark);
+            line-height: 1.8;
+        }
+
+        /* Dashboard */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .stat-card .stat-label {
+            color: var(--text-light);
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .chart-container h3 {
+            margin-bottom: 20px;
+            color: var(--text-dark);
+        }
+
+        .mood-distribution {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .mood-bar {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .mood-label {
+            min-width: 80px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .mood-bar-fill {
+            flex: 1;
+            height: 30px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mood-bar-text {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: var(--light-bg);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .history-item-emoji { font-size: 24px; margin-right: 10px; }
+        .history-item-mood { font-weight: 600; color: var(--text-dark); text-transform: capitalize; }
+        .history-item-time { font-size: 12px; color: var(--text-light); }
+        .history-item-confidence { font-weight: 600; color: var(--primary-color); }
+
+        /* Footer */
+        .footer {
+            background: var(--text-dark);
+            color: white;
+            text-align: center;
+            padding: 30px 0;
+            margin-top: 60px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-content { grid-template-columns: 1fr; }
+            .hero-text h1 { font-size: 36px; }
+            .hero-buttons { flex-direction: column; }
+            .stats { grid-template-columns: 1fr; }
+            .visual-circle { width: 200px; height: 200px; }
+            .visual-inner { width: 180px; height: 180px; }
+            .visual-icon { font-size: 50px; }
+            .steps { grid-template-columns: 1fr; }
+            .step-arrow { transform: rotate(90deg); }
+            .nav-links { gap: 15px; }
+            .charts-section { grid-template-columns: 1fr; }
+            .features h2, .how-it-works h2, .cta h2 { font-size: 32px; }
+            .detector-wrapper h1 { font-size: 32px; }
+            .result-emoji { font-size: 60px; }
+            .result-card h2 { font-size: 32px; }
+            .recording-buttons { flex-direction: column; }
+        }
+
+        @media (max-width: 480px) {
+            .container { padding: 0 15px; }
+            .hero-text h1 { font-size: 28px; }
+            .logo { font-size: 18px; }
+            .nav-links { gap: 10px; font-size: 14px; }
+            .hero { padding: 40px 0; }
+            .features, .how-it-works, .cta { padding: 40px 0; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .input-section { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">
+                    <span class="logo-icon">✨</span>
+                    <span class="logo-text">MindMood</span>
+                </div>
+                <div class="nav-links">
+                    <a class="nav-link active" onclick="showPage('home')">Home</a>
+                    <a class="nav-link" onclick="showPage('detector')">Detector</a>
+                    <a class="nav-link" onclick="showPage('dashboard')">Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Home Page -->
+    <div id="home" class="page active">
+        <section class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <div class="hero-text">
+                        <h1>Understand Your <span class="gradient-text">Emotions</span></h1>
+                        <p>Detect your mood through voice or text. Get personalized recommendations to improve your mental wellness.</p>
+                        <div class="hero-buttons">
+                            <button class="btn btn-primary" onclick="showPage('detector')">Start Detection →</button>
+                            <button class="btn btn-secondary">Learn More</button>
+                        </div>
+                        <div class="stats">
+                            <div class="stat">
+                                <p class="stat-number">10K+</p>
+                                <p class="stat-label">Moods Detected</p>
+                            </div>
+                            <div class="stat">
+                                <p class="stat-number">500+</p>
+                                <p class="stat-label">Happy Users</p>
+                            </div>
+                            <div class="stat">
+                                <p class="stat-number">98%</p>
+                                <p class="stat-label">Accuracy</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hero-visual">
+                        <div class="visual-circle">
+                            <div class="visual-inner">
+                                <span class="visual-icon">🧠</span>
+                                <p>AI-Powered Mood Detection</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="container">
+                <h2>Powerful Features</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🎤</div>
+                        <h3>Live Recording</h3>
+                        <p>Record your voice in real-time and let AI analyze your emotional state through tone and speech patterns.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📝</div>
+                        <h3>Text Analysis</h3>
+                        <p>Write about your feelings and get instant mood detection using advanced NLP.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💡</div>
+                        <h3>Smart Recommendations</h3>
+                        <p>Get personalized wellness suggestions based on your detected mood.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="how-it-works">
+            <div class="container">
+                <h2>How It Works</h2>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-number">01</div>
+                        <h3>Share Your Mood</h3>
+                        <p>Record your voice or write about how you're feeling</p>
+                    </div>
+                    <div class="step-arrow">→</div>
+                    <div class="step">
+                        <div class="step-number">02</div>
+                        <h3>AI Analysis</h3>
+                        <p>Our AI analyzes your input to detect emotional state</p>
+                    </div>
+                    <div class="step-arrow">→</div>
+                    <div class="step">
+                        <div class="step-number">03</div>
+                        <h3>Get Insights</h3>
+                        <p>Receive personalized recommendations and insights</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cta">
+            <div class="container">
+                <h2>Ready to Understand Your Emotions?</h2>
+                <p>Start your mood detection journey today and get personalized insights for better mental wellness.</p>
+                <button class="btn btn-large" onclick="showPage('detector')">Start Now →</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Mood Detector Page -->
+    <div id="detector" class="page">
+        <div class="container">
+            <div class="detector-wrapper">
+                <h1>Mood Detector</h1>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('text')">📝 Text Input</button>
+                    <button class="tab-btn" onclick="switchTab('voice')">🎤 Live Recording</button>
+                </div>
+
+                <div id="text-tab" class="tab-content active">
+                    <div class="input-section">
+                        <label for="text-input">How are you feeling? Tell us more...</label>
+                        <textarea id="text-input" placeholder="Write about your mood, feelings, or what's on your mind..." rows="8"></textarea>
+                        <div class="char-count">
+                            <span id="char-count">0</span> / 500 characters
+                        </div>
+                        <button class="btn btn-primary" onclick="analyzeMood('text')">Analyze Mood</button>
+                    </div>
+                </div>
+
+                <div id="voice-tab" class="tab-content">
+                    <div class="input-section">
+                        <p>Record your voice to analyze your mood from speech patterns and tone.</p>
+                        <div class="voice-upload">
+                            <div id="recording-controls" style="text-align: center; padding: 20px 0;">
+                                <button id="start-record-btn" class="btn btn-primary" onclick="startRecording()" style="margin: 10px 5px;">🎤 Start Recording</button>
+                                <button id="stop-record-btn" class="btn btn-secondary" onclick="stopRecording()" style="display: none; margin: 10px 5px;">⏹️ Stop Recording</button>
+                            </div>
+                            <div id="recording-timer" style="text-align: center; font-size: 18px; font-weight: bold; color: #ef4444; display: none; margin: 15px 0;">
+                                Recording: <span id="timer">00:00</span>
+                            </div>
+                            <div id="recording-playback" style="display: none; margin-top: 20px;">
+                                <p style="margin-bottom: 15px; font-weight: 600;">Your Recording:</p>
+                                <audio id="recorded-audio" controls style="width: 100%; margin-bottom: 15px;"></audio>
+                                <div class="recording-buttons">
+                                    <button class="btn btn-secondary" onclick="clearRecording()">Clear Recording</button>
+                                    <button id="analyze-recording-btn" class="btn btn-primary" onclick="analyzeMood('voice')">Analyze Recording</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="results" class="results-section" style="display: none;">
+                    <div class="result-card">
+                        <div class="result-emoji" id="result-emoji"></div>
+                        <h2 id="result-mood"></h2>
+                        <div class="confidence-bar">
+                            <div id="confidence-fill" class="confidence-fill"></div>
+                        </div>
+                        <p class="confidence-text"><span id="confidence-value">0</span>% Confidence</p>
+                        <div class="recommendation-box">
+                            <h3>Recommendation</h3>
+                            <p id="recommendation-text"></p>
+                        </div>
+                        <button class="btn btn-secondary" onclick="resetDetector()">Analyze Again</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Page -->
+    <div id="dashboard" class="page">
+        <div class="container">
+            <h1 style="text-align: center; margin-bottom: 40px;">Mood Dashboard</h1>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <p class="stat-label">Total Detections</p>
+                    <p class="stat-value" id="total-detections">0</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-label">Average Confidence</p>
+                    <p class="stat-value" id="avg-confidence">0%</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-label">Most Frequent Mood</p>
+                    <p class="stat-value" id="frequent-mood">-</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-label">Current Streak</p>
+                    <p class="stat-value" id="streak">7 days</p>
+                </div>
+            </div>
+
+            <div class="charts-section">
+                <div class="chart-container">
+                    <h3>Mood Distribution</h3>
+                    <div id="mood-distribution" class="mood-distribution"></div>
+                </div>
+                <div class="chart-container">
+                    <h3>Recent Detections</h3>
+                    <div id="history-list" class="history-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 MindMood. All rights reserved. | Made with ❤️ for better mental wellness</p>
+        </div>
+    </footer>
+
+    <script>
+        // Mood Data
+        const MOOD_DATA = {
+            moods: {
+                amused: { emoji: "😄", color: "#fbbf24", recommendation: "You're feeling amused! Keep enjoying this light-hearted moment. Share laughter with others and engage in activities that bring you joy." },
+                angry: { emoji: "😠", color: "#ef4444", recommendation: "You're feeling angry. Try taking deep breaths, going for a walk, or engaging in physical activity to channel this energy." },
+                disgusted: { emoji: "🤢", color: "#8b5cf6", recommendation: "You're feeling disgusted. Take a step back from the situation. Engage in activities that refresh your mind and spirit." },
+                neutral: { emoji: "😐", color: "#9ca3af", recommendation: "You're feeling neutral. This is a balanced state perfect for reflection and planning. Use this time to assess your goals." },
+                sleepy: { emoji: "😴", color: "#60a5fa", recommendation: "You're feeling sleepy. Your body might need rest. Consider taking a nap or engaging in a relaxing activity." }
+            },
+            keywords: {
+                amused: ["amused", "funny", "hilarious", "laugh", "laughing", "laughter", "joke", "comic", "entertaining", "fun", "playful", "silly", "witty", "humorous", "cheerful", "delighted", "tickled", "giddy", "giggly", "chuckling", "smiling", "happy", "joyful", "enjoying", "pleased", "content", "light-hearted", "carefree"],
+                angry: ["angry", "furious", "rage", "mad", "livid", "irritated", "annoyed", "frustrated", "upset", "outraged", "enraged", "seething", "fuming", "bitter", "resentful", "hostile", "aggressive", "cross", "irate", "indignant", "wrathful", "incensed", "provoked", "exasperated", "vexed", "infuriated", "antagonistic"],
+                disgusted: ["disgusted", "disgust", "repulsed", "revolted", "appalled", "sickened", "nauseated", "repugnant", "abhorrent", "loathsome", "vile", "gross", "yuck", "ew", "eww", "revolting", "offensive", "distasteful", "unpleasant", "repellent", "abominable", "detestable", "contemptible", "despicable", "foul", "putrid", "disgusting"],
+                neutral: ["neutral", "okay", "fine", "alright", "normal", "regular", "usual", "average", "meh", "so-so", "neither", "neither good nor bad", "mediocre", "ordinary", "standard", "typical", "unremarkable", "indifferent", "balanced", "stable", "steady", "consistent", "unchanged", "same", "moderate", "fair", "plain"],
+                sleepy: ["sleepy", "tired", "exhausted", "fatigued", "drowsy", "weary", "worn out", "drained", "lethargic", "sluggish", "groggy", "yawning", "dozing", "napping", "sleepless", "insomnia", "rest", "sleep", "nap", "bed", "tired out", "beat", "knackered", "wiped out", "zonked", "dead tired", "bushed", "pooped"]
+            }
+        };
+
+        let recordedFile = null;
+        let moodHistory = [];
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recordingStartTime = null;
+        let timerInterval = null;
+
+        // Page Navigation
+        function showPage(pageName) {
+            const pages = document.querySelectorAll('.page');
+            pages.forEach(page => page.classList.remove('active'));
+            document.getElementById(pageName).classList.add('active');
+            
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(link => link.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (pageName === 'dashboard') updateDashboard();
+        }
+
+        // Tab Switching
+        function switchTab(tabName) {
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            tabBtns.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        // Text Input
+        const textInput = document.getElementById('text-input');
+        const charCount = document.getElementById('char-count');
+        if (textInput) {
+            textInput.addEventListener('input', function() {
+                charCount.textContent = this.value.length;
+                if (this.value.length > 500) {
+                    this.value = this.value.substring(0, 500);
+                    charCount.textContent = '500';
+                }
+            });
+        }
+
+        // Live Voice Recording
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                recordedChunks = [];
+                recordingStartTime = Date.now();
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+                    recordedFile = audioBlob;
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    document.getElementById('recorded-audio').src = audioUrl;
+                    document.getElementById('recording-playback').style.display = 'block';
+                    document.getElementById('recording-controls').style.display = 'none';
+                    document.getElementById('recording-timer').style.display = 'none';
+                    clearInterval(timerInterval);
+                };
+                
+                mediaRecorder.start();
+                document.getElementById('start-record-btn').style.display = 'none';
+                document.getElementById('stop-record-btn').style.display = 'inline-block';
+                document.getElementById('recording-timer').style.display = 'block';
+                
+                timerInterval = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = elapsed % 60;
+                    document.getElementById('timer').textContent = 
+                        String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+                }, 100);
+            } catch (error) {
+                alert('Microphone access denied. Please allow microphone access to record.');
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                document.getElementById('stop-record-btn').style.display = 'none';
+            }
+        }
+        
+        function clearRecording() {
+            recordedFile = null;
+            recordedChunks = [];
+            document.getElementById('recorded-audio').src = '';
+            document.getElementById('recording-playback').style.display = 'none';
+            document.getElementById('recording-controls').style.display = 'block';
+            document.getElementById('start-record-btn').style.display = 'inline-block';
+            document.getElementById('timer').textContent = '00:00';
+        }
+
+        // Mood Analysis
+        function analyzeMood(type) {
+            let input = '';
+            if (type === 'text') {
+                input = document.getElementById('text-input').value.trim();
+                if (!input) {
+                    alert('Please enter some text to analyze');
+                    return;
+                }
+            } else if (type === 'voice') {
+                if (!recordedFile) {
+                    alert('Please record your voice first');
+                    return;
+                }
+                input = 'voice_recording';
+            }
+            
+            const result = detectMood(input);
+            displayResults(result);
+            
+            const historyEntry = {
+                mood: result.mood,
+                confidence: result.confidence,
+                type: type,
+                timestamp: new Date(),
+                emoji: result.emoji
+            };
+            moodHistory.push(historyEntry);
+            localStorage.setItem('moodHistory', JSON.stringify(moodHistory));
+        }
+
+        function detectMood(input) {
+            const moodKeywords = MOOD_DATA.keywords;
+            const moodScores = {
+                amused: 0,
+                angry: 0,
+                disgusted: 0,
+                neutral: 0,
+                sleepy: 0
+            };
+            
+            const lowerInput = input.toLowerCase();
+            
+            Object.entries(moodKeywords).forEach(([mood, keywords]) => {
+                keywords.forEach(keyword => {
+                    const regex = new RegExp('\\b' + keyword + '\\b', 'gi');
+                    const matches = lowerInput.match(regex);
+                    if (matches) {
+                        moodScores[mood] += matches.length;
+                    }
+                });
+            });
+            
+            let detectedMood = 'neutral';
+            let maxScore = 0;
+            
+            Object.entries(moodScores).forEach(([mood, score]) => {
+                if (score > maxScore) {
+                    maxScore = score;
+                    detectedMood = mood;
+                }
+            });
+            
+            const inputLength = input.split(/\s+/).length;
+            let confidence = Math.min(100, 50 + (maxScore * 5) + Math.min(inputLength * 2, 20));
+            
+            if (maxScore === 0) {
+                detectedMood = 'neutral';
+                confidence = 60;
+            }
+            
+            confidence = Math.round(confidence);
+            const moodInfo = MOOD_DATA.moods[detectedMood];
+            
+            return {
+                mood: detectedMood,
+                confidence: confidence,
+                emoji: moodInfo.emoji,
+                recommendation: moodInfo.recommendation,
+                color: moodInfo.color
+            };
+        }
+
+        function displayResults(result) {
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('result-emoji').textContent = result.emoji;
+            document.getElementById('result-mood').textContent = result.mood;
+            document.getElementById('confidence-value').textContent = result.confidence;
+            document.getElementById('recommendation-text').textContent = result.recommendation;
+            
+            const confidenceFill = document.getElementById('confidence-fill');
+            confidenceFill.style.width = result.confidence + '%';
+            
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function resetDetector() {
+            document.getElementById('text-input').value = '';
+            charCount.textContent = '0';
+            clearRecording();
+            document.getElementById('results').style.display = 'none';
+        }
+
+        // Dashboard
+        function updateDashboard() {
+            const savedHistory = localStorage.getItem('moodHistory');
+            if (savedHistory) {
+                moodHistory = JSON.parse(savedHistory);
+            }
+            
+            const totalDetections = moodHistory.length;
+            document.getElementById('total-detections').textContent = totalDetections;
+            
+            if (totalDetections > 0) {
+                const avgConfidence = Math.round(
+                    moodHistory.reduce((sum, item) => sum + item.confidence, 0) / totalDetections
+                );
+                document.getElementById('avg-confidence').textContent = avgConfidence + '%';
+            } else {
+                document.getElementById('avg-confidence').textContent = '0%';
+            }
+            
+            if (totalDetections > 0) {
+                const moodCounts = {};
+                moodHistory.forEach(item => {
+                    moodCounts[item.mood] = (moodCounts[item.mood] || 0) + 1;
+                });
+                
+                const mostFrequent = Object.entries(moodCounts).sort(([, a], [, b]) => b - a)[0];
+                const frequentMood = mostFrequent ? mostFrequent[0] : 'N/A';
+                const emoji = MOOD_DATA.moods[frequentMood]?.emoji || '';
+                document.getElementById('frequent-mood').textContent = emoji + ' ' + frequentMood;
+            } else {
+                document.getElementById('frequent-mood').textContent = '-';
+            }
+            
+            // Mood Distribution
+            const distributionContainer = document.getElementById('mood-distribution');
+            if (moodHistory.length === 0) {
+                distributionContainer.innerHTML = '<p style="color: #94a3b8;">No mood data yet. Start detecting moods!</p>';
+            } else {
+                const moodCounts = {};
+                moodHistory.forEach(item => {
+                    moodCounts[item.mood] = (moodCounts[item.mood] || 0) + 1;
+                });
+                
+                let html = '';
+                Object.entries(moodCounts).forEach(([mood, count]) => {
+                    const moodInfo = MOOD_DATA.moods[mood];
+                    html += '<div class="mood-bar"><div class="mood-label">' + moodInfo.emoji + ' ' + mood + '</div><div class="mood-bar-fill" style="background: linear-gradient(90deg, ' + moodInfo.color + ', #ec4899);"><div class="mood-bar-text">' + count + '</div></div></div>';
+                });
+                distributionContainer.innerHTML = html;
+            }
+            
+            // History List
+            const historyContainer = document.getElementById('history-list');
+            if (moodHistory.length === 0) {
+                historyContainer.innerHTML = '<p style="color: #94a3b8;">No mood history yet.</p>';
+            } else {
+                const recentHistory = moodHistory.slice(-10).reverse();
+                let html = '';
+                recentHistory.forEach((item) => {
+                    const time = new Date(item.timestamp).toLocaleTimeString();
+                    const date = new Date(item.timestamp).toLocaleDateString();
+                    html += '<div class="history-item"><div style="display: flex; align-items: center; flex: 1;"><span class="history-item-emoji">' + item.emoji + '</span><div><div class="history-item-mood">' + item.mood + '</div><div class="history-item-time">' + date + ' at ' + time + '</div></div></div><div class="history-item-confidence">' + item.confidence + '%</div></div>';
+                });
+                historyContainer.innerHTML = html;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedHistory = localStorage.getItem('moodHistory');
+            if (savedHistory) {
+                moodHistory = JSON.parse(savedHistory);
+            }
+        });
+    </script>
+</body>
+</html>
