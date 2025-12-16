@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mood Analyzer</title>
+    <link rel="stylesheet" href="style.css"> <!-- Link to style.css -->
+    <script src="script.js" defer></script> <!-- Link to your script.js -->
+</head>
+<body>
+    <div class="container mt-5">
+        <h2>Mood Analyzer</h2>
+        <ul class="nav nav-tabs" id="moodTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <a class="nav-link active" id="text-tab" data-bs-toggle="tab" href="#text-tab-content" role="tab" aria-controls="text-tab-content" aria-selected="true">Text Mood Analysis</a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="voice-tab" data-bs-toggle="tab" href="#voice-tab-content" role="tab" aria-controls="voice-tab-content" aria-selected="false">Voice Mood Analysis</a>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="moodTabContent">
+            <!-- Text Mood Analysis Tab -->
+            <div class="tab-pane fade show active" id="text-tab-content" role="tabpanel" aria-labelledby="text-tab">
+                <div class="input-section">
+                    <label for="text-input">Enter your text to analyze mood:</label>
+                    <textarea id="text-input" class="form-control" rows="4"></textarea>
+                    <button class="btn btn-primary mt-3" onclick="analyzeText()">Analyze Mood</button>
+                </div>
+            </div>
+
+            <!-- Voice Mood Analysis Tab -->
+            <div class="tab-pane fade" id="voice-tab-content" role="tabpanel" aria-labelledby="voice-tab">
+                <div class="input-section">
+                    <p>Record your voice to analyze your mood from speech patterns and tone.</p>
+                    <div class="voice-upload">
+                        <div id="recording-controls" style="text-align: center; padding: 20px 0;">
+                            <button id="start-record-btn" class="btn btn-primary" onclick="startRecording()" style="margin: 10px 5px;">🎤 Start Recording</button>
+                            <button id="stop-record-btn" class="btn btn-secondary" onclick="stopRecording()" style="display: none; margin: 10px 5px;">⏹️ Stop Recording</button>
+                        </div>
+                        <div id="recording-timer" style="text-align: center; font-size: 18px; font-weight: bold; color: #ef4444; display: none; margin: 15px 0;">
+                            Recording: <span id="timer">00:00</span>
+                        </div>
+                        <div id="recording-playback" style="display: none; margin-top: 20px;">
+                            <p style="margin-bottom: 15px; font-weight: 600;">Your Recording:</p>
+                            <audio id="recorded-audio" controls style="width: 100%; margin-bottom: 15px;"></audio>
+                            <div class="recording-buttons">
+                                <button class="btn btn-secondary" onclick="clearRecording()">Clear Recording</button>
+                                <button id="analyze-recording-btn" class="btn btn-primary" onclick="analyzeVoice()" disabled>Analyze Recording</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mood Result Section -->
+        <div id="mood-result" class="mt-4"></div>
+    </div>
+
+    <!-- Bootstrap JS (Optional, for tabs and other features) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
